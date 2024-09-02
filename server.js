@@ -12,7 +12,7 @@ app.use(express.json()); // For parsing application/json
 app.use(cors()); // Enable CORS
 
 // Routes
-app.use('/employees', employeeRoutes);
+app.use('/', employeeRoutes);
 
 // Set up Swagger
 setupSwagger(app);
