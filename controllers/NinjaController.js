@@ -1,6 +1,45 @@
-import dataService from '../services/employeeService.js';
+import dataService from '../services/NinjaService.js';
+/**
+ * Handle POST request to add a new resource allocation.
+ * @param {Object} req - The request object.
+ * @param {Object} res - The response object.
+ */
+async function addResourceAllocation(req, res) {
+    const newAllocation = req.body;
 
+    if (!newAllocation) {
+        return res.status(400).json({ error: 'Invalid input' });
+    }
+
+    try {
+        const updatedData = resourceService.addResourceAllocation(newAllocation);
+        return res.status(201).json(updatedData);
+    } catch (error) {
+        return res.status(500).json({ error: 'Failed to add resource allocation' });
+    }
+}
+// const addResourceAllocation=(req,res)=>{
+//     try {
+//         const newAllocation = req.body;
+
+//         // Basic validation
+//         if (!newAllocation.resourceName || !newAllocation.allocation || !newAllocation.clientName || !newAllocation.clientProject || newAllocation.percentageAllocation === undefined) {
+//             return res.status(400).json({ message: 'All fields are required' });
+//         }
+
+//         // Call the data service to add the new resource allocation
+//         const updatedAllocations = dataService.addResourceAllocation(newAllocation);
+
+//         // Respond with the updated list of allocations or the new allocation
+//         res.status(201).json(updatedAllocations);
+//     } catch (error) {
+//         // Handle errors and respond with a server error status code
+//         console.error('Error adding resource allocation:', error);
+//         res.status(500).json({ message: 'Internal Server Error' });
+//     }
+// }
 // Employee Controllers
+
 const getAllEmployees = async (req, res) => {
     try {
         const employees = dataService.getAllEmployees();
@@ -136,8 +175,38 @@ const generateBenchReport = async (req, res) => {
         res.status(500).json({ error: 'An error occurred while generating the bench report.' });
     }
 };
-
-export default {
+const getAllAllocations = (req, res) => {
+    try {
+        const allocations = allocationService.getAllocations();
+        res.status(200).json(allocations);
+    } catch (error) {
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+const getClientDetails = (req, res) => {
+    const clientId = parseInt(req.params.id, 10);
+    const client = dataService.getClientById(clientId);
+    if (client) {
+      res.json(client);
+    } else {
+      res.status(404).send('Client not found');
+    }
+  };
+  
+  const getProjectsForClient = (req, res) => {
+    const clientId = parseInt(req.params.id, 10);
+    const projects = dataService.getProjectsByClientId(clientId);
+    res.json(projects);
+  };
+  
+  const getEmployeesForProject = (req, res) => {
+    const projectId = parseInt(req.params.projectId, 10);
+    const employees = dataService.getEmployeesByProjectId(projectId);
+    res.json(employees);
+  };
+export default{
+    getAllAllocations,
+    addResourceAllocation,
     getAllEmployees,
     getEmployeeByName,
     getEmployeeById,
@@ -148,5 +217,8 @@ export default {
     getProjectAllocations,
     getEmployeeAllocations,
     generateAllocationReport,
-    generateBenchReport
+    generateBenchReport,
+    getClientDetails,
+  getProjectsForClient,
+  getEmployeesForProject
 };
