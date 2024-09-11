@@ -1,25 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import mysql from 'mysql'; // Import MySQL
-
+import db from './dbSetup.js';
 const app = express();
 const port = 5000;
 
 // MySQL database connection
-const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
-  password: 'syedanwar@2002',
-  database: 'ninja',
-});
 
-db.connect((err) => {
-  if (err) {
-    console.error('Database connection error:', err);
-    process.exit(1); // Exit process with error code
-  }
-  console.log('Database connected');
-});
 
 // Middleware
 app.use(cors()); // Enable CORS

@@ -1,0 +1,302 @@
+openapi: 3.0.0
+info:
+  title: Employee Allocation API
+  description: API for managing employee allocations, clients, and projects.
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000
+paths:
+  /employees/todo:
+    get:
+      summary: Get employees with zero allocation
+      responses:
+        '200':
+          description: A list of employees with zero allocation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    EmployeeID:
+                      type: integer
+                    EmployeeName:
+                      type: string
+                    Email:
+                      type: string
+                    Allocation:
+                      type: integer
+  /employees/drafts:
+    get:
+      summary: Get employees with allocations
+      responses:
+        '200':
+          description: A list of employees with allocations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    EmployeeID:
+                      type: integer
+                    EmployeeName:
+                      type: string
+                    Email:
+                      type: string
+                    Allocation:
+                      type: integer
+        '404':
+          description: No employees with allocations found
+  /api/allocate:
+    put:
+      summary: Allocate a project to an employee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                EmployeeID:
+                  type: integer
+                ClientName:
+                  type: string
+                ProjectName:
+                  type: string
+                Allocation:
+                  type: integer
+                Role:
+                  type: string
+                AllocationStartDate:
+                  type: string
+                  format: date
+                AllocationEndDate:
+                  type: string
+                  format: date
+                TimesheetApproval:
+                  type: boolean
+                BillingRate:
+                  type: number
+                  format: float
+      responses:
+        '200':
+          description: Allocation updated successfully or added
+        '400':
+          description: Required fields are missing
+        '404':
+          description: Client or project not found
+        '500':
+          description: Internal server error
+  /employees:
+    get:
+      summary: Get all employees with their allocation
+      responses:
+        '200':
+          description: A list of employees with their allocations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    EmployeeID:
+                      type: integer
+                    EmployeeName:
+                      type: string
+                    Email:
+                      type: string
+                    Allocation:
+                      type: integer
+  /clients:
+    get:
+      summary: Get all clients
+      responses:
+        '200':
+          description: A list of clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    ClientID:
+                      type: integer
+                    ClientName:
+                      type: string
+                    Status:
+                      type: string
+                    Country:
+                      type: string
+                    StartDate:
+                      type: string
+                      format: date
+                    EndDate:
+                      type: string
+                      format: date
+                    NoOfProjects:
+                      type: integer
+                    NoOfEmployees:
+                      type: integer
+  /client/{clientId}/projects:
+    get:
+      summary: Get projects for a specific client
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: A list of projects for the client
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    ProjectID:
+                      type: integer
+                    ProjectName:
+                      type: string
+                    Status:
+                      type: string
+                    Category:
+                      type: string
+        '404':
+          description: No projects found for this client
+  /client/{clientname}/allprojects:
+    get:
+      summary: Get all projects for a client by name
+      parameters:
+        - in: path
+          name: clientname
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A list of all projects for the client
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    ProjectID:
+                      type: integer
+                    ProjectName:
+                      type: string
+                    Status:
+                      type: string
+                    Category:
+                      type: string
+        '404':
+          description: No projects found for this client
+  /project/{name}/employees:
+    get:
+      summary: Get employees working on a specific project
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A list of employees working on the project
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    EmployeeID:
+                      type: integer
+                    Role:
+                      type: string
+                    EmployeeName:
+                      type: string
+                    Email:
+                      type: string
+                    Allocation:
+                      type: integer
+  /detailed-view/{employeeId}:
+    get:
+      summary: Get detailed view of an employee's project assignments
+      parameters:
+        - in: path
+          name: employeeId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Detailed view of employee's assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    EmployeeName:
+                      type: string
+                    EmployeeID:
+                      type: integer
+                    ClientName:
+                      type: string
+                    ProjectName:
+                      type: string
+                    Allocation:
+                      type: integer
+                    ProjectStatus:
+                      type: string
+                    AllocationStartDate:
+                      type: string
+                      format: date
+                    AllocationEndDate:
+                      type: string
+                      format: date
+                    Actions:
+                      type: string
+  /form/{employeeId}:
+    put:
+      summary: Update allocation data
+      parameters:
+        - in: path
+          name: employeeId
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                clientId:
+                  type: integer
+                status:
+                  type: string
+                  enum: ['allocated', 'unallocated']
+                allocation:
+                  type: integer
+      responses:
+        '200':
+          description: Allocation updated successfully
+        '400':
+          description: Invalid request parameters
+        '404':
+          description: No project assignment found for this employee and client
+        '500':
+          description: Internal server error
