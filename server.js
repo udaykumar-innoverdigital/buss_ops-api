@@ -15,7 +15,7 @@ app.use(express.json()); // Parse JSON bodies
 // API endpoint to get employees with zero allocation
 app.get('/employees/todo', (req, res) => {
   const query = `
-    SELECT e.EmployeeID, e.EmployeeName, e.Email, COALESCE(pa.Allocation, 0) AS Allocation
+    SELECT e.EmployeeID, e.EmployeeName, e.Email, COALESCE(SUM(pa.Allocation), 0) AS Allocation
     FROM Employees e
     LEFT JOIN ProjectAssignments pa ON e.EmployeeID = pa.EmployeeID
     WHERE e.HasProjectAssigned = 0
@@ -30,6 +30,7 @@ app.get('/employees/todo', (req, res) => {
     res.json(results);
   });
 });
+
 app.get('/employees/drafts', (req, res) => {
   const query = `
     SELECT e.EmployeeID, e.EmployeeName, e.Email, 
@@ -54,7 +55,6 @@ app.get('/employees/drafts', (req, res) => {
     res.json(results);
   });
 });
-
 app.put('/api/allocate', (req, res) => {
   const {
     EmployeeID,
@@ -67,15 +67,26 @@ app.put('/api/allocate', (req, res) => {
     TimesheetApproval, // New field
     BillingRate        // New field
   } = req.body;
-console.log(AllocationEndDate)
+
+  console.log('Received data:', req.body); // Log the received data
+
+  // Update valid TimesheetApproval values to the new allowed values
+  const validTimesheetApprovalValues = ['Rajendra', 'Kiran', 'Sishir']; // Updated values
+
   // Validate required fields
   if (!EmployeeID || !ClientName || !ProjectName || Allocation === undefined || !AllocationStartDate || !AllocationEndDate || TimesheetApproval === undefined || BillingRate === undefined) {
     return res.status(400).json({ message: 'Required fields are missing' });
   }
 
+  // Validate TimesheetApproval value
+  if (!validTimesheetApprovalValues.includes(TimesheetApproval)) {
+    return res.status(400).json({ message: 'Invalid TimesheetApproval value' });
+  }
+
   // Start a transaction
   db.beginTransaction((err) => {
     if (err) {
+      console.error('Error starting transaction:', err);
       return res.status(500).json({ message: 'Transaction error', error: err });
     }
 
@@ -85,6 +96,7 @@ console.log(AllocationEndDate)
       [ClientName],
       (err, clientRows) => {
         if (err) {
+          console.error('Error retrieving ClientID:', err);
           return db.rollback(() => res.status(500).json({ message: 'Database query error', error: err }));
         }
 
@@ -99,6 +111,7 @@ console.log(AllocationEndDate)
           [ProjectName, clientID],
           (err, projectRows) => {
             if (err) {
+              console.error('Error retrieving ProjectID:', err);
               return db.rollback(() => res.status(500).json({ message: 'Database query error', error: err }));
             }
 
@@ -113,6 +126,7 @@ console.log(AllocationEndDate)
               [projectID, EmployeeID],
               (err, assignmentRows) => {
                 if (err) {
+                  console.error('Error checking existing assignment:', err);
                   return db.rollback(() => res.status(500).json({ message: 'Query error', error: err }));
                 }
 
@@ -123,12 +137,14 @@ console.log(AllocationEndDate)
                     [Allocation, Role, AllocationStartDate, AllocationEndDate, TimesheetApproval, BillingRate, projectID, EmployeeID],
                     (err) => {
                       if (err) {
+                        console.error('Error updating assignment:', err);
                         return db.rollback(() => res.status(500).json({ message: 'Update error', error: err }));
                       }
 
                       // Commit transaction
                       db.commit((err) => {
                         if (err) {
+                          console.error('Error committing transaction:', err);
                           return db.rollback(() => res.status(500).json({ message: 'Commit error', error: err }));
                         }
 
@@ -143,6 +159,8 @@ console.log(AllocationEndDate)
                     [projectID, EmployeeID, Allocation, Role, AllocationStartDate, AllocationEndDate, TimesheetApproval, BillingRate],
                     (err) => {
                       if (err) {
+                        console.error('Error inserting new assignment:', err); // Log the error
+                        console.log('Failed data:', { projectID, EmployeeID, Allocation, Role, AllocationStartDate, AllocationEndDate, TimesheetApproval, BillingRate }); // Log the failed data
                         return db.rollback(() => res.status(500).json({ message: 'Insert error', error: err }));
                       }
 
@@ -152,12 +170,14 @@ console.log(AllocationEndDate)
                         [EmployeeID],
                         (err) => {
                           if (err) {
+                            console.error('Error updating employee status:', err);
                             return db.rollback(() => res.status(500).json({ message: 'Update error', error: err }));
                           }
 
                           // Commit transaction
                           db.commit((err) => {
                             if (err) {
+                              console.error('Error committing transaction:', err);
                               return db.rollback(() => res.status(500).json({ message: 'Commit error', error: err }));
                             }
 
@@ -177,12 +197,13 @@ console.log(AllocationEndDate)
   });
 });
 
+
 app.get('/employees', (req, res) => {
   const query = `
     SELECT e.EmployeeID, e.EmployeeName, e.Email, COALESCE(SUM(pa.Allocation), 0) AS Allocation
     FROM Employees e
     LEFT JOIN ProjectAssignments pa ON e.EmployeeID = pa.EmployeeID
-    GROUP BY e.EmployeeID, e.EmployeeName, e.Email,Allocation
+    GROUP BY e.EmployeeID, e.EmployeeName, e.Email
   `;
 
   db.query(query, (err, results) => {
@@ -193,6 +214,7 @@ app.get('/employees', (req, res) => {
     res.json(results);
   });
 });
+
 
 app.get('/clients', (req, res) => {
   const query = `
@@ -379,4 +401,124 @@ app.put('/form/:employeeId', (req, res) => {
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
+});
+
+
+app.get('/employees/client/innover', (req, res) => {
+  // SQL query to get employees who are only working for projects of client "Innover"
+  const query = `
+    SELECT e.EmployeeID, e.EmployeeName, e.Email, GROUP_CONCAT(DISTINCT p.ProjectName) AS ProjectNames, SUM(pa.Allocation) AS Allocation
+    FROM Employees e
+    JOIN ProjectAssignments pa ON e.EmployeeID = pa.EmployeeID
+    JOIN Projects p ON pa.ProjectID = p.ProjectID
+    JOIN Clients c ON p.ClientID = c.ClientID
+    GROUP BY e.EmployeeID, e.EmployeeName, e.Email
+    HAVING COUNT(DISTINCT c.ClientID) = 1 AND MIN(c.ClientName) = 'Innover';
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('Error executing query:', err);
+      return res.status(500).send('Internal Server Error');
+    }
+    if (results.length === 0) {
+      return res.status(404).send('No employees found for the client "Innover"');
+    }
+    res.json(results);
+  });
+});
+
+
+app.post('/project/allocate-resource', (req, res) => {
+  console.log(req.body);
+  const { employeeName, projectName, Allocation } = req.body;
+ 
+  if (!employeeName || !projectName || !Allocation) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+ 
+  const formattedProjectName = projectName.replace(/-/g, ' ');
+ 
+  // Start a transaction
+  db.beginTransaction((err) => {
+    if (err) {
+      return res.status(500).json({ error: 'Transaction error', error: err });
+    }
+ 
+    // Check if the EmployeeID exists
+    db.query('SELECT EmployeeID FROM employees WHERE EmployeeName = ?', [employeeName], (err, employeeResults) => {
+      if (err) {
+        return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
+      }
+ 
+      if (employeeResults.length === 0) {
+        return db.rollback(() => res.status(404).json({ error: 'Employee not found' }));
+      }
+      const employeeID = employeeResults[0].EmployeeID;
+ 
+      // Check if the ProjectID exists
+      db.query('SELECT ProjectID FROM projects WHERE ProjectName = ?', [formattedProjectName], (err, projectResults) => {
+        if (err) {
+          return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
+        }
+ 
+        if (projectResults.length === 0) {
+          return db.rollback(() => res.status(404).json({ error: 'Project not found' }));
+        }
+        const projectID = projectResults[0].ProjectID;
+ 
+        // Check if the assignment already exists
+        db.query('SELECT * FROM projectassignments WHERE ProjectID = ? AND EmployeeID = ?', [projectID, employeeID], (err, assignmentResults) => {
+          if (err) {
+            return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
+          }
+ 
+          if (assignmentResults.length > 0) {
+            // Update existing assignment (if needed)
+            db.query(
+              'UPDATE projectassignments SET Allocation = ? WHERE ProjectID = ? AND EmployeeID = ?',
+              [Allocation, projectID, employeeID],
+              (err) => {
+                if (err) {
+                  return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
+                }
+ 
+                db.commit((err) => {
+                  if (err) {
+                    return db.rollback(() => res.status(500).json({ error: 'Commit error', error: err }));
+                  }
+ 
+                  res.status(200).json({ message: 'Allocation updated successfully' });
+                });
+              }
+            );
+          } else {
+            // Insert new assignment
+            db.query(
+              'INSERT INTO projectassignments (ProjectID, EmployeeID, Allocation) VALUES (?, ?, ?)',
+              [projectID, employeeID, Allocation],
+              (err) => {
+                if (err) {
+                  // Handle duplicate entry error specifically
+                  if (err.code === 'ER_DUP_ENTRY') {
+                    return db.rollback(() => res.status(409).json({ error: 'Duplicate entry for allocation' }));
+                  }
+ 
+                  return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
+                }
+ 
+                db.commit((err) => {
+                  if (err) {
+                    return db.rollback(() => res.status(500).json({ error: 'Commit error', error: err }));
+                  }
+ 
+                  res.status(201).json({ message: 'Resource allocated successfully' });
+                });
+              }
+            );
+          }
+        });
+      });
+    });
+  });
 });
