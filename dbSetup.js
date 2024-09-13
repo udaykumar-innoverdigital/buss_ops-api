@@ -4,7 +4,7 @@ import mysql from 'mysql';
 const db = mysql.createConnection({
   host: 'localhost',
   user: 'root',
-  password: 'Ishu*12#',
+  password: 'Innover@2024',
   database: 'ninja',
 });
 
@@ -54,7 +54,7 @@ function createTables() {
         EmployeeName VARCHAR(255) NOT NULL,
         Email VARCHAR(255) UNIQUE NOT NULL,
         HasProjectAssigned BOOLEAN DEFAULT FALSE,
-        Role varcahrach(255),
+        Role varchar(255),
         Status varchar(255)
       )
     `,
@@ -197,9 +197,9 @@ function insertInitialData(table) {
       (9, 5, 10.00, 'Quality Assurance', NULL, NULL, NULL, NULL),
       (1, 5, 10.00, 'Developer', '2002-01-31', '2002-02-21', NULL, NULL),
       (1, 3, 10.00, 'Developer', '2002-01-31', '2002-02-21', NULL, NULL),
-      (6, 1, 10.00, 'Allocated', '2024-09-03', '2024-09-19', 'Pending', 100.00),
-      (7, 16, 10.00, 'Allocated', '2024-09-12', '2024-09-12', 'Pending', 100.00),
-      (4, 16, 10.00, 'Allocated', '2024-09-12', '2024-09-19', 'Pending', 12.00);
+      (6, 1, 10.00, 'Allocated', '2024-09-03', '2024-09-19', 'Kiran', 100.00),
+      (7, 16, 10.00, 'Allocated', '2024-09-12', '2024-09-12', 'Kiran', 100.00),
+      (4, 16, 10.00, 'Allocated', '2024-09-12', '2024-09-19', 'Kiran', 12.00);
     `,
   };
 
