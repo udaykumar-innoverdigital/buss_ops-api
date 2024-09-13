@@ -53,7 +53,9 @@ function createTables() {
         EmployeeID INT AUTO_INCREMENT PRIMARY KEY,
         EmployeeName VARCHAR(255) NOT NULL,
         Email VARCHAR(255) UNIQUE NOT NULL,
-        HasProjectAssigned BOOLEAN DEFAULT FALSE
+        HasProjectAssigned BOOLEAN DEFAULT FALSE,
+        Role varcahrach(255),
+        Status varchar(255)
       )
     `,
     clients: `
@@ -87,7 +89,7 @@ function createTables() {
         Role VARCHAR(100),
         AllocationStartDate DATE,
         AllocationEndDate DATE,
-        TimesheetApproval BOOLEAN DEFAULT FALSE,
+      TimesheetApproval ENUM('Rajendra', 'Kiran', 'Shishir') DEFAULT 'Rajendra',
         BillingRate DECIMAL(10, 2),
         FOREIGN KEY (ProjectID) REFERENCES Projects(ProjectID),
         FOREIGN KEY (EmployeeID) REFERENCES Employees(EmployeeID)

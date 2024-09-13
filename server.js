@@ -377,6 +377,107 @@ app.put('/form/:employeeId', (req, res) => {
 });
 
 
+
+
+
+
+
+
+app.post('/project/allocate-resource', (req, res) => {
+  console.log(req.body);
+  const { employeeName, projectName, Allocation } = req.body;
+
+  if (!employeeName || !projectName || !Allocation) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const formattedProjectName = projectName.replace(/-/g, ' ');
+
+  // Start a transaction
+  db.beginTransaction((err) => {
+    if (err) {
+      return res.status(500).json({ error: 'Transaction error', error: err });
+    }
+
+    // Check if the EmployeeID exists
+    db.query('SELECT EmployeeID FROM employees WHERE EmployeeName = ?', [employeeName], (err, employeeResults) => {
+      if (err) {
+        return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
+      }
+
+      if (employeeResults.length === 0) {
+        return db.rollback(() => res.status(404).json({ error: 'Employee not found' }));
+      }
+      const employeeID = employeeResults[0].EmployeeID;
+
+      // Check if the ProjectID exists
+      db.query('SELECT ProjectID FROM projects WHERE ProjectName = ?', [formattedProjectName], (err, projectResults) => {
+        if (err) {
+          return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
+        }
+
+        if (projectResults.length === 0) {
+          return db.rollback(() => res.status(404).json({ error: 'Project not found' }));
+        }
+        const projectID = projectResults[0].ProjectID;
+
+        // Check if the assignment already exists
+        db.query('SELECT * FROM projectassignments WHERE ProjectID = ? AND EmployeeID = ?', [projectID, employeeID], (err, assignmentResults) => {
+          if (err) {
+            return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
+          }
+
+          if (assignmentResults.length > 0) {
+            // Update existing assignment (if needed)
+            db.query(
+              'UPDATE projectassignments SET Allocation = ? WHERE ProjectID = ? AND EmployeeID = ?',
+              [Allocation, projectID, employeeID],
+              (err) => {
+                if (err) {
+                  return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
+                }
+
+                db.commit((err) => {
+                  if (err) {
+                    return db.rollback(() => res.status(500).json({ error: 'Commit error', error: err }));
+                  }
+
+                  res.status(200).json({ message: 'Allocation updated successfully' });
+                });
+              }
+            );
+          } else {
+            // Insert new assignment
+            db.query(
+              'INSERT INTO projectassignments (ProjectID, EmployeeID, Allocation) VALUES (?, ?, ?)',
+              [projectID, employeeID, Allocation],
+              (err) => {
+                if (err) {
+                  // Handle duplicate entry error specifically
+                  if (err.code === 'ER_DUP_ENTRY') {
+                    return db.rollback(() => res.status(409).json({ error: 'Duplicate entry for allocation' }));
+                  }
+
+                  return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
+                }
+
+                db.commit((err) => {
+                  if (err) {
+                    return db.rollback(() => res.status(500).json({ error: 'Commit error', error: err }));
+                  }
+
+                  res.status(201).json({ message: 'Resource allocated successfully' });
+                });
+              }
+            );
+          }
+        });
+      });
+    });
+  });
+});
+
+
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
