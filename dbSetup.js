@@ -4,7 +4,7 @@ import mysql from 'mysql';
 const db = mysql.createConnection({
   host: 'localhost',
   user: 'root',
-  password: 'Innover@2024',
+  password: '12345',
   database: 'ninja',
 });
 
@@ -29,7 +29,6 @@ function checkAndCreateTables() {
   db.query(checkTablesQuery, (err, results) => {
     if (err) {
       console.error('Error checking tables:', err);
-    
       return;
     }
 
@@ -39,8 +38,8 @@ function checkAndCreateTables() {
       createTables();
     } else {
       console.log('All tables exist.');
-      // Check if tables are empty
-      checkIfTablesAreEmpty();
+      // Alter tables to add new columns if needed
+      alterTables();
     }
   });
 }
@@ -209,6 +208,52 @@ function insertInitialData(table) {
     } else {
       console.log(`Initial data inserted into ${table}`);
     }
+  });
+}
+
+// Function to alter tables
+function alterTables() {
+  const columns = [
+    { name: 'Studio', type: 'VARCHAR(255)' },
+    { name: 'SubStudio', type: 'VARCHAR(255)' },
+    { name: 'ContactNumber', type: 'VARCHAR(15)' },
+    { name: 'Location', type: 'VARCHAR(255)' }
+  ];
+
+  columns.forEach(column => {
+    const checkColumnQuery = `
+      SELECT COUNT(*) AS count 
+      FROM information_schema.columns 
+      WHERE table_schema = 'ninja' 
+        AND table_name = 'Employees' 
+        AND column_name = '${column.name}';
+    `;
+
+    db.query(checkColumnQuery, (err, results) => {
+      if (err) {
+        console.error(`Error checking if column ${column.name} exists:`, err);
+        return;
+      }
+
+      const columnExists = results[0].count > 0;
+
+      if (!columnExists) {
+        const addColumnQuery = `
+          ALTER TABLE Employees
+          ADD COLUMN ${column.name} ${column.type};
+        `;
+
+        db.query(addColumnQuery, (err) => {
+          if (err) {
+            console.error(`Error adding column ${column.name}:`, err);
+            return;
+          }
+          console.log(`Column ${column.name} added successfully`);
+        });
+      } else {
+        console.log(`Column ${column.name} already exists.`);
+      }
+    });
   });
 }
 
