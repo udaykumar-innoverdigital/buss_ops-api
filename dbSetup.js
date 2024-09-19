@@ -29,7 +29,6 @@ function checkAndCreateTables() {
   db.query(checkTablesQuery, (err, results) => {
     if (err) {
       console.error('Error checking tables:', err);
-    
       return;
     }
 
@@ -39,8 +38,8 @@ function checkAndCreateTables() {
       createTables();
     } else {
       console.log('All tables exist.');
-      // Check if tables are empty
-      checkIfTablesAreEmpty();
+      // Alter tables to add new columns if needed
+      alterTables();
     }
   });
 }
