@@ -3,7 +3,7 @@ import cors from 'cors';
 import mysql from 'mysql'; // Import MySQL
 import db from './dbSetup.js';
 const app = express();
-const port = 5000;
+const port = 8080;
 
 // MySQL database connection
 
@@ -12,49 +12,7 @@ const port = 5000;
 app.use(cors()); // Enable CORS
 app.use(express.json()); // Parse JSON bodies
 
-// API endpoint to get employees with zero allocation
-app.get('/employees/todo', (req, res) => {
-  const query = `
-    SELECT e.EmployeeID, e.EmployeeName, e.Email, COALESCE(SUM(pa.Allocation), 0) AS Allocation
-    FROM Employees e
-    LEFT JOIN ProjectAssignments pa ON e.EmployeeID = pa.EmployeeID
-    WHERE e.HasProjectAssigned = 0
-    GROUP BY e.EmployeeID, e.EmployeeName, e.Email
-  `;
 
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error('Error executing query:', err);
-      return res.status(500).send('Internal Server Error');
-    }
-    res.json(results);
-  });
-});
-
-app.get('/employees/drafts', (req, res) => {
-  const query = `
-    SELECT e.EmployeeID, e.EmployeeName, e.Email, 
-           COALESCE(SUM(pa.Allocation), 0) AS Allocation
-    FROM Employees e
-    LEFT JOIN ProjectAssignments pa ON e.EmployeeID = pa.EmployeeID
-    WHERE pa.Allocation IS NOT NULL AND pa.Allocation > 0
-    GROUP BY e.EmployeeID, e.EmployeeName, e.Email
-  `;
-
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error('Error executing query:', err);
-      return res.status(500).send('Internal Server Error');
-    }
-
-    // Handle case where no employees are found
-    if (results.length === 0) {
-      return res.status(404).send('No employees with allocations found');
-    }
-
-    res.json(results);
-  });
-});
 app.put('/api/allocate', (req, res) => {
   const {
     EmployeeID,
@@ -200,10 +158,24 @@ app.put('/api/allocate', (req, res) => {
 
 app.get('/employees', (req, res) => {
   const query = `
-    SELECT e.EmployeeID, e.EmployeeName, e.Email, COALESCE(SUM(pa.Allocation), 0) AS Allocation
-    FROM Employees e
-    LEFT JOIN ProjectAssignments pa ON e.EmployeeID = pa.EmployeeID
-    GROUP BY e.EmployeeID, e.EmployeeName, e.Email
+    SELECT
+      e.EmployeeId AS EmployeeID,
+      e.EmployeeName,
+      e.EmployeeRole,
+      GROUP_CONCAT(DISTINCT p.ProjectName SEPARATOR ', ') AS Projects,
+      COALESCE(SUM(a.AllocationPercent), 0) AS Current_Allocation
+    FROM
+      Employees e
+    LEFT JOIN
+      Allocations a ON e.EmployeeId = a.EmployeeID
+        AND a.AllocationStatus IN ('Client Unallocated', 'Project Unallocated', 'Allocated')
+        AND CURRENT_DATE() BETWEEN a.AllocationStartDate AND a.AllocationEndDate
+    LEFT JOIN
+      Projects p ON a.ProjectID = p.ProjectID
+    GROUP BY
+      e.EmployeeId, e.EmployeeName, e.EmployeeRole
+    ORDER BY
+      e.EmployeeName ASC;
   `;
 
   db.query(query, (err, results) => {
@@ -211,7 +183,192 @@ app.get('/employees', (req, res) => {
       console.error('Error executing query:', err);
       return res.status(500).send('Internal Server Error');
     }
-    res.json(results);
+
+    // Transform the results to handle cases where Projects might be NULL
+    const formattedResults = results.map(employee => ({
+      EmployeeID: employee.EmployeeID,
+      EmployeeName: employee.EmployeeName,
+      EmployeeRole: employee.EmployeeRole,
+      Projects: employee.Projects ? employee.Projects.split(', ').filter(p => p) : [],
+      Current_Allocation: employee.Current_Allocation
+    }));
+
+    res.json(formattedResults);
+  });
+});
+
+// New /employees/unallocated endpoint
+app.get('/employees/unallocated', (req, res) => {
+  const query = `
+    SELECT
+      e.EmployeeId AS EmployeeID,
+      e.EmployeeName,
+      e.EmployeeRole,
+      GROUP_CONCAT(DISTINCT p.ProjectName SEPARATOR ', ') AS Projects,
+      COALESCE(SUM(a.AllocationPercent), 0) AS Current_Allocation
+    FROM
+      Employees e
+    LEFT JOIN
+      Allocations a ON e.EmployeeId = a.EmployeeID
+        AND a.AllocationStatus IN ('Client Unallocated', 'Project Unallocated', 'Allocated')
+        AND CURRENT_DATE() BETWEEN a.AllocationStartDate AND a.AllocationEndDate
+    LEFT JOIN
+      Projects p ON a.ProjectID = p.ProjectID
+    GROUP BY
+      e.EmployeeId, e.EmployeeName, e.EmployeeRole
+    HAVING
+      Projects IS NULL AND Current_Allocation = 0
+    ORDER BY
+      e.EmployeeName ASC;
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('Error executing unallocated query:', err);
+      return res.status(500).send('Internal Server Error');
+    }
+
+    // Since Projects is NULL and Current_Allocation is 0, Projects array should be empty
+    const formattedResults = results.map(employee => ({
+      EmployeeID: employee.EmployeeID,
+      EmployeeName: employee.EmployeeName,
+      EmployeeRole: employee.EmployeeRole,
+      Projects: [], // Explicitly setting to empty array as Projects is NULL
+      Current_Allocation: 0
+    }));
+
+    res.json(formattedResults);
+  });
+});
+
+app.get('/employees/draft', (req, res) => {
+  const query = `
+    SELECT
+      e.EmployeeId AS EmployeeID,
+      e.EmployeeName,
+      e.EmployeeRole,
+      GROUP_CONCAT(DISTINCT p.ProjectName SEPARATOR ', ') AS Projects,
+      COALESCE(SUM(a.AllocationPercent), 0) AS Current_Allocation
+    FROM
+      Employees e
+    LEFT JOIN
+      Allocations a ON e.EmployeeId = a.EmployeeID
+        AND a.AllocationStatus IN ('Client Unallocated', 'Project Unallocated', 'Allocated')
+        AND CURRENT_DATE() BETWEEN a.AllocationStartDate AND a.AllocationEndDate
+    LEFT JOIN
+      Projects p ON a.ProjectID = p.ProjectID
+    GROUP BY
+      e.EmployeeId, e.EmployeeName, e.EmployeeRole
+    HAVING
+      Current_Allocation > 0 AND Current_Allocation < 100
+    ORDER BY
+      e.EmployeeName ASC;
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('Error executing draft query:', err);
+      return res.status(500).send('Internal Server Error');
+    }
+
+    // Transform the results
+    const formattedResults = results.map(employee => ({
+      EmployeeID: employee.EmployeeID,
+      EmployeeName: employee.EmployeeName,
+      EmployeeRole: employee.EmployeeRole,
+      Projects: employee.Projects ? employee.Projects.split(', ').filter(p => p) : [],
+      Current_Allocation: employee.Current_Allocation
+    }));
+
+    res.json(formattedResults);
+  });
+});
+
+app.get('/employees/allocated', (req, res) => {
+  const query = `
+    SELECT
+      e.EmployeeId AS EmployeeID,
+      e.EmployeeName,
+      e.EmployeeRole,
+      GROUP_CONCAT(DISTINCT p.ProjectName SEPARATOR ', ') AS Projects,
+      COALESCE(SUM(a.AllocationPercent), 0) AS Current_Allocation
+    FROM
+      Employees e
+    LEFT JOIN
+      Allocations a ON e.EmployeeId = a.EmployeeID
+        AND a.AllocationStatus IN ('Client Unallocated', 'Project Unallocated', 'Allocated')
+        AND CURRENT_DATE() BETWEEN a.AllocationStartDate AND a.AllocationEndDate
+    LEFT JOIN
+      Projects p ON a.ProjectID = p.ProjectID
+    GROUP BY
+      e.EmployeeId, e.EmployeeName, e.EmployeeRole
+    HAVING
+      Current_Allocation = 100
+    ORDER BY
+      e.EmployeeName ASC;
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('Error executing fully allocated query:', err);
+      return res.status(500).send('Internal Server Error');
+    }
+
+    // Since Current_Allocation is 100, Projects should contain all allocated projects
+    const formattedResults = results.map(employee => ({
+      EmployeeID: employee.EmployeeID,
+      EmployeeName: employee.EmployeeName,
+      EmployeeRole: employee.EmployeeRole,
+      Projects: employee.Projects ? employee.Projects.split(', ').filter(p => p) : [],
+      Current_Allocation: employee.Current_Allocation
+    }));
+
+    res.json(formattedResults);
+  });
+});
+
+// New /employees/bench endpoint
+app.get('/employees/bench', (req, res) => {
+  const query = `
+    SELECT
+      e.EmployeeId AS EmployeeID,
+      e.EmployeeName,
+      e.EmployeeRole,
+      GROUP_CONCAT(DISTINCT p.ProjectName SEPARATOR ', ') AS Projects,
+      COALESCE(SUM(a.AllocationPercent), 0) AS Current_Allocation
+    FROM
+      Employees e
+    LEFT JOIN
+      Allocations a ON e.EmployeeId = a.EmployeeID
+        AND a.ClientID = 1
+        AND a.AllocationStatus IN ('Client Unallocated', 'Project Unallocated', 'Allocated')
+        AND CURRENT_DATE() BETWEEN a.AllocationStartDate AND a.AllocationEndDate
+    LEFT JOIN
+      Projects p ON a.ProjectID = p.ProjectID
+    GROUP BY
+      e.EmployeeId, e.EmployeeName, e.EmployeeRole
+    HAVING
+      Current_Allocation > 0
+    ORDER BY
+      e.EmployeeName ASC;
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('Error executing bench query:', err);
+      return res.status(500).send('Internal Server Error');
+    }
+
+    // Format the results
+    const formattedResults = results.map(employee => ({
+      EmployeeID: employee.EmployeeID,
+      EmployeeName: employee.EmployeeName,
+      EmployeeRole: employee.EmployeeRole,
+      Projects: employee.Projects ? employee.Projects.split(', ').filter(p => p) : [],
+      Current_Allocation: employee.Current_Allocation
+    }));
+
+    res.json(formattedResults);
   });
 });
 
