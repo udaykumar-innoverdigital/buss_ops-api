@@ -308,6 +308,7 @@ app.get('/employees/allocated', (req, res) => {
       Projects p ON a.ProjectID = p.ProjectID
     WHERE
       e.EmployeeKekaStatus = 'Active'
+      AND a.ClientID != 1  -- Exclude allocations with ClientID = 1
     GROUP BY
       e.EmployeeId, e.EmployeeName, e.EmployeeRole
     HAVING
