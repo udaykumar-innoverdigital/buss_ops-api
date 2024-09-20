@@ -72,7 +72,7 @@ function createTables(tables) {
       CREATE TABLE IF NOT EXISTS Clients (
         ClientID INT AUTO_INCREMENT PRIMARY KEY,
         ClientName VARCHAR(255) UNIQUE NOT NULL,
-        Country VARCHAR(100),
+        ClientCountry VARCHAR(100),
         ClientLogo VARCHAR(100)
       )
     `,
@@ -91,8 +91,8 @@ function createTables(tables) {
     Allocations: `
       CREATE TABLE IF NOT EXISTS Allocations (
         AllocationID INT AUTO_INCREMENT PRIMARY KEY,
-        ProjectID INT,
         ClientID INT,
+        ProjectID INT,
         EmployeeID VARCHAR(10),
         AllocationStatus ENUM('Client Unallocated', 'Project Unallocated', 'Allocated', 'Closed') NOT NULL,
         AllocationPercent INT NOT NULL CHECK (AllocationPercent BETWEEN 0 AND 100),
@@ -170,7 +170,7 @@ function checkIfTablesAreEmpty() {
 function insertInitialData(table) {
   const queries = {
     Clients: `
-      INSERT INTO Clients (ClientName, Country, ClientLogo) VALUES
+      INSERT INTO Clients (ClientName, ClientCountry, ClientLogo) VALUES
         ('Innover Digital.', 'USA', 'https://example.com/logos/tech_innovators.png'),
         ('Global Finance Corp.', 'Canada', 'https://example.com/logos/global_finance.png'),
         ('HealthPlus Solutions', 'India', 'https://example.com/logos/healthplus.png'),
@@ -184,15 +184,15 @@ function insertInitialData(table) {
     `,
     Projects: `
       INSERT INTO Projects (ProjectName, ClientID, ProjectStatus, ProjectCategory, ProjectStartDate, ProjectEndDate) VALUES
-        ('Project Alpha', 1, 'Completed', 'Software Development', '2022-01-15', '2022-08-01'),
-        ('Project Beta', 2, 'In Progress', 'IT Consulting', '2023-03-01', NULL),
-        ('Project Gamma', 3, 'On Hold', 'Cloud Solutions', '2023-05-20', NULL),
-        ('Project Delta', 1, 'In Progress', 'Mobile App Development', '2023-07-10', NULL),
+        ('Project Alpha', 1, 'Completed', 'Software Development', '2024-01-15', '2025-08-01'),
+        ('Project Beta', 2, 'In Progress', 'IT Consulting', '2024-03-01', NULL),
+        ('Project Gamma', 3, 'On Hold', 'Cloud Solutions', '2024-05-20', NULL),
+        ('Project Delta', 1, 'In Progress', 'Mobile App Development', '2024-07-10', NULL),
         ('Project Epsilon', 4, 'Completed', 'Security Solutions', '2021-11-01', '2022-03-15'),
         ('Project Zeta', 1, 'Completed', 'Software Development', '2022-01-15', '2022-08-01'),
-        ('Project Omni', 2, 'In Progress', 'IT Consulting', '2023-03-01', NULL),
-        ('Project Galaxy', 3, 'On Hold', 'Cloud Solutions', '2023-05-20', NULL),
-        ('Project Star', 1, 'In Progress', 'Mobile App Development', '2023-07-10', NULL),
+        ('Project Omni', 2, 'In Progress', 'IT Consulting', '2024-03-01', NULL),
+        ('Project Galaxy', 3, 'On Hold', 'Cloud Solutions', '2024-05-20', NULL),
+        ('Project Star', 1, 'In Progress', 'Mobile App Development', '2024-07-10', NULL),
         ('Project Peanuts', 4, 'Completed', 'Security Solutions', '2021-11-01', '2022-03-15');
     `,
     Employees: `

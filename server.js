@@ -381,23 +381,38 @@ app.get('/employees/bench', (req, res) => {
   });
 });
 
-
-
-
 app.get('/clients', (req, res) => {
   const query = `
-    SELECT ClientID, ClientName, Status, Country, StartDate, EndDate, NoOfProjects, NoOfEmployees
-    FROM Clients
+    SELECT 
+      c.ClientID, 
+      c.ClientName, 
+      c.ClientCountry, 
+      c.ClientLogo, 
+      COUNT(DISTINCT p.ProjectID) AS NoOfProjects,
+      COUNT(DISTINCT a.EmployeeID) AS Headcount
+    FROM 
+      Clients c
+    LEFT JOIN 
+      Allocations a ON c.ClientID = a.ClientID
+      AND CURRENT_DATE() BETWEEN a.AllocationStartDate AND a.AllocationEndDate
+    LEFT JOIN 
+      Projects p ON c.ClientID = p.ClientID
+    LEFT JOIN 
+      Employees e ON a.EmployeeID = e.EmployeeID
+    GROUP BY 
+      c.ClientID, c.ClientName, c.ClientCountry, c.ClientLogo
   `;
 
   db.query(query, (err, results) => {
     if (err) {
       console.error('Error executing query:', err);
-      return res.status(500).send('Internal Server Error');
+      return res.status(500).json({ error: 'Internal Server Error' });
     }
     res.json(results);
   });
 });
+
+
 
 app.get('/client/:clientId/projects', (req, res) => {
   const clientId = req.params.clientId;
