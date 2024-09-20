@@ -172,6 +172,8 @@ app.get('/employees', (req, res) => {
         AND CURRENT_DATE() BETWEEN a.AllocationStartDate AND a.AllocationEndDate
     LEFT JOIN
       Projects p ON a.ProjectID = p.ProjectID
+    WHERE
+      e.EmployeeKekaStatus = 'Active'
     GROUP BY
       e.EmployeeId, e.EmployeeName, e.EmployeeRole
     ORDER BY
@@ -197,7 +199,7 @@ app.get('/employees', (req, res) => {
   });
 });
 
-// New /employees/unallocated endpoint
+
 app.get('/employees/unallocated', (req, res) => {
   const query = `
     SELECT
@@ -214,6 +216,8 @@ app.get('/employees/unallocated', (req, res) => {
         AND CURRENT_DATE() BETWEEN a.AllocationStartDate AND a.AllocationEndDate
     LEFT JOIN
       Projects p ON a.ProjectID = p.ProjectID
+    WHERE
+      e.EmployeeKekaStatus = 'Active'
     GROUP BY
       e.EmployeeId, e.EmployeeName, e.EmployeeRole
     HAVING
@@ -257,6 +261,8 @@ app.get('/employees/draft', (req, res) => {
         AND CURRENT_DATE() BETWEEN a.AllocationStartDate AND a.AllocationEndDate
     LEFT JOIN
       Projects p ON a.ProjectID = p.ProjectID
+    WHERE
+      e.EmployeeKekaStatus = 'Active'
     GROUP BY
       e.EmployeeId, e.EmployeeName, e.EmployeeRole
     HAVING
@@ -300,6 +306,8 @@ app.get('/employees/allocated', (req, res) => {
         AND CURRENT_DATE() BETWEEN a.AllocationStartDate AND a.AllocationEndDate
     LEFT JOIN
       Projects p ON a.ProjectID = p.ProjectID
+    WHERE
+      e.EmployeeKekaStatus = 'Active'
     GROUP BY
       e.EmployeeId, e.EmployeeName, e.EmployeeRole
     HAVING
@@ -327,7 +335,6 @@ app.get('/employees/allocated', (req, res) => {
   });
 });
 
-// New /employees/bench endpoint
 app.get('/employees/bench', (req, res) => {
   const query = `
     SELECT
@@ -345,6 +352,8 @@ app.get('/employees/bench', (req, res) => {
         AND CURRENT_DATE() BETWEEN a.AllocationStartDate AND a.AllocationEndDate
     LEFT JOIN
       Projects p ON a.ProjectID = p.ProjectID
+    WHERE
+      e.EmployeeKekaStatus = 'Active'
     GROUP BY
       e.EmployeeId, e.EmployeeName, e.EmployeeRole
     HAVING
@@ -371,6 +380,8 @@ app.get('/employees/bench', (req, res) => {
     res.json(formattedResults);
   });
 });
+
+
 
 
 app.get('/clients', (req, res) => {
