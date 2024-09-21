@@ -390,7 +390,7 @@ app.get('/clients', (req, res) => {
       c.ClientLogo,
       c.ClientPartner,
       COUNT(DISTINCT p.ProjectID) AS NoOfProjects,
-      COUNT(DISTINCT a.EmployeeID) AS Headcount
+      COUNT(DISTINCT CONCAT(a.EmployeeID, '-', a.ProjectID)) AS Headcount
     FROM 
       Clients c
     LEFT JOIN 
@@ -417,27 +417,46 @@ app.get('/clients', (req, res) => {
 
 app.get('/client/:clientId/projects', (req, res) => {
   const clientId = req.params.clientId;
+  const currentDate = new Date().toISOString().split('T')[0];  // Get current date in YYYY-MM-DD format
 
-  // Query to get all projects for a specific client
   const query = `
-    SELECT ProjectID, ProjectName, Status, Category
-    FROM Projects
-    WHERE ClientID = ?
+    SELECT 
+      p.ProjectID, 
+      p.ProjectName, 
+      p.ProjectStatus, 
+      p.ProjectCategory, 
+      p.ProjectManager, 
+      p.ProjectStartDate, 
+      p.ProjectEndDate,
+      c.ClientName,
+      (SELECT COUNT(DISTINCT EmployeeID) 
+       FROM Allocations 
+       WHERE ProjectID = p.ProjectID 
+         AND AllocationStartDate <= ? 
+         AND (AllocationEndDate >= ? OR AllocationEndDate IS NULL)) AS Headcount
+    FROM 
+      Projects p
+    JOIN 
+      Clients c ON p.ClientID = c.ClientID
+    WHERE 
+      p.ClientID = ?
   `;
 
-  db.query(query, [clientId], (err, projects) => {
+  db.query(query, [currentDate, currentDate, clientId], (err, projects) => {
     if (err) {
       console.error('Error executing query:', err);
-      return res.status(500).send('Internal Server Error');
+      return res.status(500).json({ error: 'Internal Server Error' });
     }
     
     if (projects.length === 0) {
-      return res.status(404).send('No projects found for this client');
+      return res.status(404).json({ message: 'No projects found for this client' });
     }
 
     res.json(projects);
   });
 });
+
+
 app.get('/client/:clientname/allprojects', (req, res) => {
   const encodedclientName = req.params.clientname;
   const ClientName = decodeURIComponent(encodedclientName); // Decode the URL-encoded project name
