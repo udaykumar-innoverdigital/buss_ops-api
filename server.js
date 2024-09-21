@@ -387,7 +387,8 @@ app.get('/clients', (req, res) => {
       c.ClientID, 
       c.ClientName, 
       c.ClientCountry, 
-      c.ClientLogo, 
+      c.ClientLogo,
+      c.ClientPartner,
       COUNT(DISTINCT p.ProjectID) AS NoOfProjects,
       COUNT(DISTINCT a.EmployeeID) AS Headcount
     FROM 
@@ -400,7 +401,7 @@ app.get('/clients', (req, res) => {
     LEFT JOIN 
       Employees e ON a.EmployeeID = e.EmployeeID
     GROUP BY 
-      c.ClientID, c.ClientName, c.ClientCountry, c.ClientLogo
+      c.ClientID, c.ClientName, c.ClientCountry, c.ClientPartner, c.ClientLogo
   `;
 
   db.query(query, (err, results) => {

@@ -73,6 +73,7 @@ function createTables(tables) {
         ClientID INT AUTO_INCREMENT PRIMARY KEY,
         ClientName VARCHAR(255) UNIQUE NOT NULL,
         ClientCountry VARCHAR(100),
+        ClientPartner VARCHAR(100),
         ClientLogo VARCHAR(100)
       )
     `,
@@ -83,6 +84,7 @@ function createTables(tables) {
         ClientID INT,
         ProjectStatus VARCHAR(50),
         ProjectCategory VARCHAR(100),
+        ProjectManager VARCHAR(100),
         ProjectStartDate DATE NOT NULL,
         ProjectEndDate DATE,
         FOREIGN KEY (ClientID) REFERENCES Clients(ClientID)
@@ -170,30 +172,32 @@ function checkIfTablesAreEmpty() {
 function insertInitialData(table) {
   const queries = {
     Clients: `
-      INSERT INTO Clients (ClientName, ClientCountry, ClientLogo) VALUES
-        ('Innover Digital.', 'USA', 'https://example.com/logos/tech_innovators.png'),
-        ('Global Finance Corp.', 'Canada', 'https://example.com/logos/global_finance.png'),
-        ('HealthPlus Solutions', 'India', 'https://example.com/logos/healthplus.png'),
-        ('EcoGreen Enterprises', 'Germany', 'https://example.com/logos/ecogreen.png'),
-        ('NextGen Media', 'Australia', 'https://example.com/logos/nextgen_media.png'),
-        ('Alpha Manufacturing', 'China', 'https://example.com/logos/alpha_manufacturing.png'),
-        ('Bright Future Education', 'UK', 'https://example.com/logos/bright_future.png'),
-        ('Urban Developers', 'Singapore', 'https://example.com/logos/urban_developers.png'),
-        ('Solaris Energy', 'Netherlands', 'https://example.com/logos/solaris_energy.png'),
-        ('MediCare Partners', 'France', 'https://example.com/logos/medicare_partners.png');
+      INSERT INTO Clients (ClientName, ClientCountry, ClientPartner, ClientLogo) VALUES
+        ('Innover Digital.', 'USA', 'Rajendra', 'https://example.com/logos/tech_innovators.png'),
+        ('Global Finance Corp.', 'Canada', 'Sudir', 'https://example.com/logos/global_finance.png'),
+        ('HealthPlus Solutions', 'India', 'Stalin', 'https://example.com/logos/healthplus.png'),
+        ('EcoGreen Enterprises', 'Germany', 'Jai', 'https://example.com/logos/ecogreen.png'),
+        ('NextGen Media', 'Australia', 'Shetty', 'https://example.com/logos/nextgen_media.png'),
+        ('Alpha Manufacturing', 'China', 'Nancy', 'https://example.com/logos/alpha_manufacturing.png'),
+        ('Bright Future Education', 'UK', 'Paul', 'https://example.com/logos/bright_future.png'),
+        ('Urban Developers', 'Singapore', 'Walker', 'https://example.com/logos/urban_developers.png'),
+        ('Solaris Energy', 'Netherlands', 'Vin', 'https://example.com/logos/solaris_energy.png'),
+        ('MediCare Partners', 'France', 'Diesel', 'https://example.com/logos/medicare_partners.png');
+
     `,
     Projects: `
-      INSERT INTO Projects (ProjectName, ClientID, ProjectStatus, ProjectCategory, ProjectStartDate, ProjectEndDate) VALUES
-        ('Project Alpha', 1, 'Completed', 'Software Development', '2024-01-15', '2025-08-01'),
-        ('Project Beta', 2, 'In Progress', 'IT Consulting', '2024-03-01', NULL),
-        ('Project Gamma', 3, 'On Hold', 'Cloud Solutions', '2024-05-20', NULL),
-        ('Project Delta', 1, 'In Progress', 'Mobile App Development', '2024-07-10', NULL),
-        ('Project Epsilon', 4, 'Completed', 'Security Solutions', '2021-11-01', '2022-03-15'),
-        ('Project Zeta', 1, 'Completed', 'Software Development', '2022-01-15', '2022-08-01'),
-        ('Project Omni', 2, 'In Progress', 'IT Consulting', '2024-03-01', NULL),
-        ('Project Galaxy', 3, 'On Hold', 'Cloud Solutions', '2024-05-20', NULL),
-        ('Project Star', 1, 'In Progress', 'Mobile App Development', '2024-07-10', NULL),
-        ('Project Peanuts', 4, 'Completed', 'Security Solutions', '2021-11-01', '2022-03-15');
+      INSERT INTO Projects (ProjectName, ClientID, ProjectStatus, ProjectCategory, ProjectManager, ProjectStartDate, ProjectEndDate) VALUES
+        ('Project Alpha', 1, 'Completed', 'Software Development', 'John Doe', '2024-01-15', '2025-08-01'),
+        ('Project Beta', 2, 'In Progress', 'IT Consulting', 'Jane Smith', '2024-03-01', NULL),
+        ('Project Gamma', 3, 'On Hold', 'Cloud Solutions', 'John Doe', '2024-05-20', NULL),
+        ('Project Delta', 1, 'In Progress', 'Mobile App Development', 'Sarah Connor', '2024-07-10', NULL),
+        ('Project Epsilon', 4, 'Completed', 'Security Solutions', 'James Bond', '2021-11-01', '2022-03-15'),
+        ('Project Zeta', 1, 'Completed', 'Software Development', 'John Doe', '2022-01-15', '2022-08-01'),
+        ('Project Omni', 2, 'In Progress', 'IT Consulting', 'Jane Smith', '2024-03-01', NULL),
+        ('Project Galaxy', 3, 'On Hold', 'Cloud Solutions', 'John Doe', '2024-05-20', NULL),
+        ('Project Star', 1, 'In Progress', 'Mobile App Development', 'Sarah Connor', '2024-07-10', NULL),
+        ('Project Peanuts', 4, 'Completed', 'Security Solutions', 'James Bond', '2021-11-01', '2022-03-15');
+
     `,
     Employees: `
       INSERT INTO Employees (EmployeeId, EmployeeName, EmployeeRole, EmployeeEmail, EmployeeStudio, EmployeeSubStudio, EmployeeLocation, EmployeeJoiningDate, EmployeeEndingDate, EmployeeSkills, EmployeeKekaStatus, EmployeeTYOE, EmployeePhotoDetails) VALUES
