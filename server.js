@@ -155,7 +155,7 @@ app.put('/api/allocate', (req, res) => {
   });
 });
 
-
+// Done
 app.get('/employees', (req, res) => {
   const query = `
     SELECT
@@ -198,8 +198,7 @@ app.get('/employees', (req, res) => {
     res.json(formattedResults);
   });
 });
-
-
+// Done
 app.get('/employees/unallocated', (req, res) => {
   const query = `
     SELECT
@@ -244,7 +243,7 @@ app.get('/employees/unallocated', (req, res) => {
     res.json(formattedResults);
   });
 });
-
+// Done
 app.get('/employees/draft', (req, res) => {
   const query = `
     SELECT
@@ -289,7 +288,7 @@ app.get('/employees/draft', (req, res) => {
     res.json(formattedResults);
   });
 });
-
+// Done
 app.get('/employees/allocated', (req, res) => {
   const query = `
     SELECT
@@ -335,7 +334,7 @@ app.get('/employees/allocated', (req, res) => {
     res.json(formattedResults);
   });
 });
-
+// Done
 app.get('/employees/bench', (req, res) => {
   const query = `
     SELECT
@@ -381,7 +380,7 @@ app.get('/employees/bench', (req, res) => {
     res.json(formattedResults);
   });
 });
-
+// Done
 app.get('/clients', (req, res) => {
   const query = `
     SELECT 
