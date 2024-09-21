@@ -162,6 +162,7 @@ app.get('/employees', (req, res) => {
       e.EmployeeId AS EmployeeID,
       e.EmployeeName,
       e.EmployeeRole,
+      e.EmployeeContractType,
       GROUP_CONCAT(DISTINCT p.ProjectName SEPARATOR ', ') AS Projects,
       COALESCE(SUM(a.AllocationPercent), 0) AS Current_Allocation
     FROM
@@ -175,7 +176,7 @@ app.get('/employees', (req, res) => {
     WHERE
       e.EmployeeKekaStatus = 'Active'
     GROUP BY
-      e.EmployeeId, e.EmployeeName, e.EmployeeRole
+      e.EmployeeId, e.EmployeeName, e.EmployeeRole, e.EmployeeContractType
     ORDER BY
       e.EmployeeName ASC;
   `;
@@ -191,6 +192,7 @@ app.get('/employees', (req, res) => {
       EmployeeID: employee.EmployeeID,
       EmployeeName: employee.EmployeeName,
       EmployeeRole: employee.EmployeeRole,
+      EmployeeContractType: employee.EmployeeContractType,
       Projects: employee.Projects ? employee.Projects.split(', ').filter(p => p) : [],
       Current_Allocation: employee.Current_Allocation
     }));
@@ -205,6 +207,7 @@ app.get('/employees/unallocated', (req, res) => {
       e.EmployeeId AS EmployeeID,
       e.EmployeeName,
       e.EmployeeRole,
+      e.EmployeeContractType,
       GROUP_CONCAT(DISTINCT p.ProjectName SEPARATOR ', ') AS Projects,
       COALESCE(SUM(a.AllocationPercent), 0) AS Current_Allocation
     FROM
@@ -218,7 +221,7 @@ app.get('/employees/unallocated', (req, res) => {
     WHERE
       e.EmployeeKekaStatus = 'Active'
     GROUP BY
-      e.EmployeeId, e.EmployeeName, e.EmployeeRole
+      e.EmployeeId, e.EmployeeName, e.EmployeeRole, e.EmployeeContractType
     HAVING
       Projects IS NULL AND Current_Allocation = 0
     ORDER BY
@@ -250,6 +253,7 @@ app.get('/employees/draft', (req, res) => {
       e.EmployeeId AS EmployeeID,
       e.EmployeeName,
       e.EmployeeRole,
+      e.EmployeeContractType,
       GROUP_CONCAT(DISTINCT p.ProjectName SEPARATOR ', ') AS Projects,
       COALESCE(SUM(a.AllocationPercent), 0) AS Current_Allocation
     FROM
@@ -263,7 +267,7 @@ app.get('/employees/draft', (req, res) => {
     WHERE
       e.EmployeeKekaStatus = 'Active'
     GROUP BY
-      e.EmployeeId, e.EmployeeName, e.EmployeeRole
+      e.EmployeeId, e.EmployeeName, e.EmployeeRole, e.EmployeeContractType
     HAVING
       Current_Allocation > 0 AND Current_Allocation < 100
     ORDER BY
@@ -281,6 +285,7 @@ app.get('/employees/draft', (req, res) => {
       EmployeeID: employee.EmployeeID,
       EmployeeName: employee.EmployeeName,
       EmployeeRole: employee.EmployeeRole,
+      EmployeeContractType: employee.EmployeeContractType,
       Projects: employee.Projects ? employee.Projects.split(', ').filter(p => p) : [],
       Current_Allocation: employee.Current_Allocation
     }));
@@ -295,6 +300,7 @@ app.get('/employees/allocated', (req, res) => {
       e.EmployeeId AS EmployeeID,
       e.EmployeeName,
       e.EmployeeRole,
+      EmployeeContractType,
       GROUP_CONCAT(DISTINCT p.ProjectName SEPARATOR ', ') AS Projects,
       COALESCE(SUM(a.AllocationPercent), 0) AS Current_Allocation
     FROM
@@ -309,7 +315,7 @@ app.get('/employees/allocated', (req, res) => {
       e.EmployeeKekaStatus = 'Active'
       AND a.ClientID != 1  -- Exclude allocations with ClientID = 1
     GROUP BY
-      e.EmployeeId, e.EmployeeName, e.EmployeeRole
+      e.EmployeeId, e.EmployeeName, e.EmployeeRole, e.EmployeeContractType
     HAVING
       Current_Allocation = 100
     ORDER BY
@@ -327,6 +333,7 @@ app.get('/employees/allocated', (req, res) => {
       EmployeeID: employee.EmployeeID,
       EmployeeName: employee.EmployeeName,
       EmployeeRole: employee.EmployeeRole,
+      EmployeeContractType: employee.EmployeeContractType,
       Projects: employee.Projects ? employee.Projects.split(', ').filter(p => p) : [],
       Current_Allocation: employee.Current_Allocation
     }));
@@ -341,6 +348,7 @@ app.get('/employees/bench', (req, res) => {
       e.EmployeeId AS EmployeeID,
       e.EmployeeName,
       e.EmployeeRole,
+      e.EmployeeContractType,
       GROUP_CONCAT(DISTINCT p.ProjectName SEPARATOR ', ') AS Projects,
       COALESCE(SUM(a.AllocationPercent), 0) AS Current_Allocation
     FROM
@@ -355,7 +363,7 @@ app.get('/employees/bench', (req, res) => {
     WHERE
       e.EmployeeKekaStatus = 'Active'
     GROUP BY
-      e.EmployeeId, e.EmployeeName, e.EmployeeRole
+      e.EmployeeId, e.EmployeeName, e.EmployeeRole, e.EmployeeContractType
     HAVING
       Current_Allocation > 0
     ORDER BY
@@ -373,6 +381,7 @@ app.get('/employees/bench', (req, res) => {
       EmployeeID: employee.EmployeeID,
       EmployeeName: employee.EmployeeName,
       EmployeeRole: employee.EmployeeRole,
+      EmployeeContractType: employee.EmployeeContractType,
       Projects: employee.Projects ? employee.Projects.split(', ').filter(p => p) : [],
       Current_Allocation: employee.Current_Allocation
     }));
@@ -412,9 +421,7 @@ app.get('/clients', (req, res) => {
     res.json(results);
   });
 });
-
-
-
+// Done
 app.get('/client/:clientId/projects', (req, res) => {
   const clientId = req.params.clientId;
   const currentDate = new Date().toISOString().split('T')[0];  // Get current date in YYYY-MM-DD format
@@ -455,6 +462,49 @@ app.get('/client/:clientId/projects', (req, res) => {
     res.json(projects);
   });
 });
+
+
+app.get('/employee-details/:employeeId', (req, res) => {
+  const employeeId = req.params.employeeId;
+
+  if (!employeeId) {
+    return res.status(400).send('Employee ID is required');
+  }
+
+  const query = `
+    SELECT 
+      EmployeeId,
+      EmployeeName,
+      EmployeeRole,
+      EmployeeEmail,
+      EmployeeStudio,
+      EmployeeSubStudio,
+      EmployeeLocation,
+      EmployeeJoiningDate,
+      EmployeeEndingDate,
+      EmployeeSkills,
+      EmployeeKekaStatus,
+      EmployeeTYOE,
+      EmployeePhotoDetails,
+      EmployeeContractType
+    FROM Employees
+    WHERE EmployeeId = ?
+  `;
+
+  db.query(query, [employeeId], (err, results) => {
+    if (err) {
+      console.error('Error executing query:', err);
+      return res.status(500).send('Internal Server Error');
+    }
+    
+    if (results.length === 0) {
+      return res.status(404).send('Employee not found');
+    }
+    
+    res.json(results[0]); // Send the first (and should be only) result
+  });
+});
+
 
 
 app.get('/client/:clientname/allprojects', (req, res) => {
@@ -526,40 +576,6 @@ app.get('/project/:name/employees', (req, res) => {
 });
 
 
-
-app.get('/detailed-view/:employeeId', (req, res) => {
-  const employeeId = req.params.employeeId;
-
-  if (!employeeId) {
-    return res.status(400).send('Employee ID is required');
-  }
-
-  const query = `
-    SELECT 
-        e.EmployeeName,
-        e.EmployeeID,
-        c.ClientName,
-        p.ProjectName,
-        pa.Allocation,
-        p.Status AS ProjectStatus,
-        pa.AllocationStartDate,
-        pa.AllocationEndDate,
-        'View Details' AS Actions
-    FROM Employees e
-    JOIN ProjectAssignments pa ON e.EmployeeID = pa.EmployeeID
-    JOIN Projects p ON pa.ProjectID = p.ProjectID
-    JOIN Clients c ON p.ClientID = c.ClientID
-    WHERE e.EmployeeID = ?
-  `;
-
-  db.query(query, [employeeId], (err, results) => {
-    if (err) {
-      console.error('Error executing query:', err);
-      return res.status(500).send('Internal Server Error');
-    }
-    res.json(results);
-  });
-});
 
 // API to update allocation data
 app.put('/form/:employeeId', (req, res) => {
