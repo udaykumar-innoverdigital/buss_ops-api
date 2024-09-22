@@ -510,33 +510,53 @@ app.get('/employee-details/:employeeId', (req, res) => {
   });
 });
 
+
+// Assuming you're using Express.js and have imported necessary modules
 app.get('/employee-details/:employeeId/allocations', (req, res) => {
   const employeeId = req.params.employeeId;
+  const filter = req.query.filter ? req.query.filter.toLowerCase() : 'all'; // Default to 'all' if not provided
 
   // Validate that Employee ID is provided
   if (!employeeId) {
     return res.status(400).send('Employee ID is required');
   }
 
-  // Query to retrieve allocation details for the specified EmployeeID
-  const allocationsQuery = `
+  // Base query to retrieve allocations for the specified EmployeeID with ClientName and ProjectName
+  let allocationsQuery = `
     SELECT 
-      AllocationID, 
-      ClientID, 
-      ProjectID, 
-      AllocationStatus, 
-      AllocationPercent, 
-      AllocationBillingType, 
-      AllocationBilledCheck, 
-      AllocationBillingRate, 
-      AllocationTimeSheetApprover, 
-      AllocationStartDate, 
-      AllocationEndDate, 
-      ModifiedBy, 
-      ModifiedAt
-    FROM Allocations
-    WHERE EmployeeID = ?
+      a.AllocationID, 
+      a.ClientID, 
+      c.ClientName,
+      a.ProjectID, 
+      p.ProjectName,
+      a.AllocationStatus, 
+      a.AllocationPercent, 
+      a.AllocationBillingType, 
+      a.AllocationBilledCheck, 
+      a.AllocationBillingRate, 
+      a.AllocationTimeSheetApprover, 
+      a.AllocationStartDate, 
+      a.AllocationEndDate, 
+      a.ModifiedBy, 
+      a.ModifiedAt
+    FROM Allocations a
+    LEFT JOIN Clients c ON a.ClientID = c.ClientID
+    LEFT JOIN Projects p ON a.ProjectID = p.ProjectID
+    WHERE a.EmployeeID = ?
   `;
+
+  // Modify the query based on the filter
+  if (filter === 'active') {
+    allocationsQuery += `
+      AND a.AllocationStatus IN ('Client Unallocated', 'Project Unallocated', 'Allocated')
+      AND CURRENT_DATE() >= a.AllocationStartDate
+      AND (a.AllocationEndDate IS NULL OR CURRENT_DATE() <= a.AllocationEndDate)
+    `;
+  } else if (filter === 'closed') {
+    allocationsQuery += `
+      AND (a.AllocationStatus = 'Closed' OR CURRENT_DATE() > a.AllocationEndDate)
+    `;
+  } // 'all' requires no additional filtering
 
   // Execute the allocations query
   db.query(allocationsQuery, [employeeId], (err, allocationsResults) => {
@@ -545,14 +565,15 @@ app.get('/employee-details/:employeeId/allocations', (req, res) => {
       return res.status(500).send('Internal Server Error');
     }
 
-    // Query to compute the current allocation percentage
+    // Query to compute the current allocation percentage (always based on active allocations)
     const currentAllocationQuery = `
       SELECT 
-        COALESCE(SUM(AllocationPercent), 0) AS Current_Allocation
-      FROM Allocations
-      WHERE EmployeeID = ?
-        AND AllocationStatus IN ('Client Unallocated', 'Project Unallocated', 'Allocated')
-        AND CURRENT_DATE() BETWEEN AllocationStartDate AND AllocationEndDate
+        COALESCE(SUM(a.AllocationPercent), 0) AS Current_Allocation
+      FROM Allocations a
+      WHERE a.EmployeeID = ?
+        AND a.AllocationStatus IN ('Client Unallocated', 'Project Unallocated', 'Allocated')
+        AND CURRENT_DATE() >= a.AllocationStartDate
+        AND (a.AllocationEndDate IS NULL OR CURRENT_DATE() <= a.AllocationEndDate)
     `;
 
     // Execute the current allocation query
@@ -573,6 +594,8 @@ app.get('/employee-details/:employeeId/allocations', (req, res) => {
     });
   });
 });
+
+
 
 
 
