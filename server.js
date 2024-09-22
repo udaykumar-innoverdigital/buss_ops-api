@@ -239,6 +239,7 @@ app.get('/employees/unallocated', (req, res) => {
       EmployeeID: employee.EmployeeID,
       EmployeeName: employee.EmployeeName,
       EmployeeRole: employee.EmployeeRole,
+      EmployeeContractType: employee.EmployeeContractType,
       Projects: [], // Explicitly setting to empty array as Projects is NULL
       Current_Allocation: 0
     }));
@@ -300,7 +301,7 @@ app.get('/employees/allocated', (req, res) => {
       e.EmployeeId AS EmployeeID,
       e.EmployeeName,
       e.EmployeeRole,
-      EmployeeContractType,
+      e.EmployeeContractType,
       GROUP_CONCAT(DISTINCT p.ProjectName SEPARATOR ', ') AS Projects,
       COALESCE(SUM(a.AllocationPercent), 0) AS Current_Allocation
     FROM
@@ -399,16 +400,17 @@ app.get('/clients', (req, res) => {
       c.ClientLogo,
       c.ClientPartner,
       COUNT(DISTINCT p.ProjectID) AS NoOfProjects,
-      COUNT(DISTINCT CONCAT(a.EmployeeID, '-', a.ProjectID)) AS Headcount
+      COUNT(DISTINCT a.EmployeeID) AS Headcount
     FROM 
       Clients c
     LEFT JOIN 
       Allocations a ON c.ClientID = a.ClientID
-      AND CURRENT_DATE() BETWEEN a.AllocationStartDate AND a.AllocationEndDate
+        AND a.AllocationStartDate <= CURRENT_DATE()
+        AND (a.AllocationEndDate >= CURRENT_DATE() OR a.AllocationEndDate IS NULL)
     LEFT JOIN 
       Projects p ON c.ClientID = p.ClientID
     LEFT JOIN 
-      Employees e ON a.EmployeeID = e.EmployeeID
+      Employees e ON a.EmployeeID = e.EmployeeId
     GROUP BY 
       c.ClientID, c.ClientName, c.ClientCountry, c.ClientPartner, c.ClientLogo
   `;
@@ -421,6 +423,7 @@ app.get('/clients', (req, res) => {
     res.json(results);
   });
 });
+
 // Done
 app.get('/client/:clientId/projects', (req, res) => {
   const clientId = req.params.clientId;
@@ -436,17 +439,19 @@ app.get('/client/:clientId/projects', (req, res) => {
       p.ProjectStartDate, 
       p.ProjectEndDate,
       c.ClientName,
-      (SELECT COUNT(DISTINCT EmployeeID) 
-       FROM Allocations 
-       WHERE ProjectID = p.ProjectID 
-         AND AllocationStartDate <= ? 
-         AND (AllocationEndDate >= ? OR AllocationEndDate IS NULL)) AS Headcount
+      COUNT(DISTINCT a.EmployeeID) AS Headcount
     FROM 
       Projects p
     JOIN 
       Clients c ON p.ClientID = c.ClientID
+    LEFT JOIN 
+      Allocations a ON p.ProjectID = a.ProjectID
+        AND a.AllocationStartDate <= ?
+        AND (a.AllocationEndDate >= ? OR a.AllocationEndDate IS NULL)
     WHERE 
       p.ClientID = ?
+    GROUP BY 
+      p.ProjectID, p.ProjectName, p.ProjectStatus, p.ProjectCategory, p.ProjectManager, p.ProjectStartDate, p.ProjectEndDate, c.ClientName
   `;
 
   db.query(query, [currentDate, currentDate, clientId], (err, projects) => {
@@ -463,7 +468,7 @@ app.get('/client/:clientId/projects', (req, res) => {
   });
 });
 
-
+// Done
 app.get('/employee-details/:employeeId', (req, res) => {
   const employeeId = req.params.employeeId;
 
@@ -502,6 +507,70 @@ app.get('/employee-details/:employeeId', (req, res) => {
     }
     
     res.json(results[0]); // Send the first (and should be only) result
+  });
+});
+
+app.get('/employee-details/:employeeId/allocations', (req, res) => {
+  const employeeId = req.params.employeeId;
+
+  // Validate that Employee ID is provided
+  if (!employeeId) {
+    return res.status(400).send('Employee ID is required');
+  }
+
+  // Query to retrieve allocation details for the specified EmployeeID
+  const allocationsQuery = `
+    SELECT 
+      AllocationID, 
+      ClientID, 
+      ProjectID, 
+      AllocationStatus, 
+      AllocationPercent, 
+      AllocationBillingType, 
+      AllocationBilledCheck, 
+      AllocationBillingRate, 
+      AllocationTimeSheetApprover, 
+      AllocationStartDate, 
+      AllocationEndDate, 
+      ModifiedBy, 
+      ModifiedAt
+    FROM Allocations
+    WHERE EmployeeID = ?
+  `;
+
+  // Execute the allocations query
+  db.query(allocationsQuery, [employeeId], (err, allocationsResults) => {
+    if (err) {
+      console.error('Error executing allocations query:', err);
+      return res.status(500).send('Internal Server Error');
+    }
+
+    // Query to compute the current allocation percentage
+    const currentAllocationQuery = `
+      SELECT 
+        COALESCE(SUM(AllocationPercent), 0) AS Current_Allocation
+      FROM Allocations
+      WHERE EmployeeID = ?
+        AND AllocationStatus IN ('Client Unallocated', 'Project Unallocated', 'Allocated')
+        AND CURRENT_DATE() BETWEEN AllocationStartDate AND AllocationEndDate
+    `;
+
+    // Execute the current allocation query
+    db.query(currentAllocationQuery, [employeeId], (err, currentAllocationResults) => {
+      if (err) {
+        console.error('Error executing current allocation query:', err);
+        return res.status(500).send('Internal Server Error');
+      }
+
+      // Extract the current allocation percentage
+      const currentAllocation = currentAllocationResults[0].Current_Allocation;
+
+      // Respond with both allocations and current allocation percentage
+      res.json({
+        allocations: allocationsResults,
+        currentAllocation: currentAllocation
+      });
+    });
   });
 });
 
