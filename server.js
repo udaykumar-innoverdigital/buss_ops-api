@@ -13,147 +13,224 @@ app.use(cors()); // Enable CORS
 app.use(express.json()); // Parse JSON bodies
 
 
-app.put('/api/allocate', (req, res) => {
+// In your Express app
+app.get('/modal/data', (req, res) => {
+  const clientsQuery = `SELECT ClientID, ClientName FROM Clients`;
+  const projectsQuery = `SELECT ProjectID, ProjectName, ClientID FROM Projects`;
+
+  db.query(clientsQuery, (err, clients) => {
+    if (err) {
+      console.error('Error fetching clients:', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+
+    db.query(projectsQuery, (err, projects) => {
+      if (err) {
+        console.error('Error fetching projects:', err);
+        return res.status(500).json({ error: 'Internal Server Error' });
+      }
+
+      res.json({ clients, projects });
+    });
+  });
+});
+app.get('/modal/data/:allocationId', (req, res) => {
+  const { allocationId } = req.params;
+
+  const allocationDetailsQuery = `
+    SELECT a.*, 
+           e.EmployeeName, 
+           p.ProjectName, 
+           c.ClientName
+    FROM Allocations a
+    JOIN Employees e ON a.EmployeeID = e.EmployeeId
+    JOIN Projects p ON a.ProjectID = p.ProjectID
+    JOIN Clients c ON a.ClientID = c.ClientID
+    WHERE a.AllocationID = ?
+  `;
+
+  db.query(allocationDetailsQuery, [allocationId], (err, results) => {
+    if (err) {
+      console.error('Error fetching allocation details:', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'Allocation not found' });
+    }
+
+    res.json(results[0]);
+  });
+});
+app.put('/allocations/:allocationId', (req, res) => {
+  const { allocationId } = req.params;
   const {
-    EmployeeID,
-    ClientName,
-    ProjectName,
-    Allocation,
-    Role,
+    ClientID,
+    ProjectID,
+    AllocationPercent,
+    AllocationStatus,
     AllocationStartDate,
     AllocationEndDate,
-    TimesheetApproval, // New field
-    BillingRate        // New field
+    AllocationTimeSheetApprover,
+    AllocationBillingRate,
+    ModifiedBy,
   } = req.body;
 
-  console.log('Received data:', req.body); // Log the received data
+  const updateQuery = `
+    UPDATE Allocations SET
+      ClientID = ?,
+      ProjectID = ?,
+      AllocationPercent = ?,
+      AllocationStatus = ?,
+      AllocationStartDate = ?,
+      AllocationEndDate = ?,
+      AllocationTimeSheetApprover = ?,
+      AllocationBillingRate = ?,
+      ModifiedBy = ?,
+      ModifiedAt = CURRENT_TIMESTAMP
+    WHERE AllocationID = ?
+  `;
 
-  // Update valid TimesheetApproval values to the new allowed values
-  const validTimesheetApprovalValues = ['Rajendra', 'Kiran', 'Sishir']; // Updated values
+  db.query(
+    updateQuery,
+    [
+      ClientID,
+      ProjectID,
+      AllocationPercent,
+      AllocationStatus,
+      AllocationStartDate,
+      AllocationEndDate,
+      AllocationTimeSheetApprover,
+      AllocationBillingRate,
+      ModifiedBy,
+      allocationId,
+    ],
+    (err, result) => {
+      if (err) {
+        console.error('Error updating allocation:', err);
+        return res.status(500).json({ error: 'Internal Server Error' });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: 'Allocation not found' });
+      }
+
+      res.json({ message: 'Allocation updated successfully' });
+    }
+  );
+});
+app.delete('/allocations/:allocationId', (req, res) => {
+  const { allocationId } = req.params;
+
+  const deleteQuery = `DELETE FROM Allocations WHERE AllocationID = ?`;
+
+  db.query(deleteQuery, [allocationId], (err, result) => {
+    if (err) {
+      console.error('Error deleting allocation:', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Allocation not found' });
+    }
+
+    res.json({ message: 'Allocation deleted successfully' });
+  });
+});
+
+// Middleware to parse JSON bodies
+app.use(express.json());
+
+// POST /api/allocate - Create a new allocation
+// app.post('/api/allocate', ...)
+
+app.post('/api/allocate', (req, res) => {
+  const {
+    EmployeeID,
+    ClientID,
+    ProjectID,
+    AllocationStatus,
+    AllocationPercent,
+    AllocationStartDate,
+    AllocationEndDate,
+    AllocationTimeSheetApprover,
+    AllocationBillingRate,
+    ModifiedBy,
+  } = req.body;
+
+  console.log('Received data:', req.body); // Log the received data for debugging
 
   // Validate required fields
-  if (!EmployeeID || !ClientName || !ProjectName || Allocation === undefined || !AllocationStartDate || !AllocationEndDate || TimesheetApproval === undefined || BillingRate === undefined) {
+  if (
+    !EmployeeID ||
+    !ClientID ||
+    !ProjectID ||
+    !AllocationStatus ||
+    AllocationPercent === undefined ||
+    !AllocationStartDate ||
+    !AllocationBillingRate
+  ) {
     return res.status(400).json({ message: 'Required fields are missing' });
   }
 
-  // Validate TimesheetApproval value
-  if (!validTimesheetApprovalValues.includes(TimesheetApproval)) {
-    return res.status(400).json({ message: 'Invalid TimesheetApproval value' });
+  // Validate AllocationStatus
+  const validStatuses = ['Client Unallocated', 'Project Unallocated', 'Allocated', 'Closed'];
+  if (!validStatuses.includes(AllocationStatus)) {
+    return res.status(400).json({ message: 'Invalid AllocationStatus value' });
   }
 
-  // Start a transaction
-  db.beginTransaction((err) => {
-    if (err) {
-      console.error('Error starting transaction:', err);
-      return res.status(500).json({ message: 'Transaction error', error: err });
-    }
+  // Validate AllocationPercent
+  if (AllocationPercent < 0 || AllocationPercent > 100) {
+    return res.status(400).json({ message: 'AllocationPercent must be between 0 and 100' });
+  }
 
-    // Retrieve ClientID
-    db.query(
-      'SELECT ClientID FROM clients WHERE ClientName = ?',
-      [ClientName],
-      (err, clientRows) => {
-        if (err) {
-          console.error('Error retrieving ClientID:', err);
-          return db.rollback(() => res.status(500).json({ message: 'Database query error', error: err }));
-        }
+  // Validate AllocationTimeSheetApprover
+  const validTimesheetApprovalValues = ['Rajendra', 'Kiran', 'Shishir'];
+  if (!validTimesheetApprovalValues.includes(AllocationTimeSheetApprover)) {
+    return res.status(400).json({ message: 'Invalid AllocationTimeSheetApprover value' });
+  }
 
-        if (clientRows.length === 0) {
-          return db.rollback(() => res.status(404).json({ message: 'Client not found' }));
-        }
-        const clientID = clientRows[0].ClientID;
+  // Insert into Allocations table
+  const insertQuery = `
+    INSERT INTO Allocations (
+      ClientID,
+      ProjectID,
+      EmployeeID,
+      AllocationStatus,
+      AllocationPercent,
+      AllocationStartDate,
+      AllocationEndDate,
+      AllocationTimeSheetApprover,
+      AllocationBillingRate,
+      ModifiedBy
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
 
-        // Retrieve ProjectID
-        db.query(
-          'SELECT ProjectID FROM projects WHERE ProjectName = ? AND ClientID = ?',
-          [ProjectName, clientID],
-          (err, projectRows) => {
-            if (err) {
-              console.error('Error retrieving ProjectID:', err);
-              return db.rollback(() => res.status(500).json({ message: 'Database query error', error: err }));
-            }
-
-            if (projectRows.length === 0) {
-              return db.rollback(() => res.status(404).json({ message: 'Project not found' }));
-            }
-            const projectID = projectRows[0].ProjectID;
-
-            // Check if the assignment already exists
-            db.query(
-              'SELECT * FROM projectassignments WHERE ProjectID = ? AND EmployeeID = ?',
-              [projectID, EmployeeID],
-              (err, assignmentRows) => {
-                if (err) {
-                  console.error('Error checking existing assignment:', err);
-                  return db.rollback(() => res.status(500).json({ message: 'Query error', error: err }));
-                }
-
-                if (assignmentRows.length > 0) {
-                  // Update existing assignment
-                  db.query(
-                    'UPDATE projectassignments SET Allocation = ?, Role = ?, AllocationStartDate = ?, AllocationEndDate = ?, TimesheetApproval = ?, BillingRate = ? WHERE ProjectID = ? AND EmployeeID = ?',
-                    [Allocation, Role, AllocationStartDate, AllocationEndDate, TimesheetApproval, BillingRate, projectID, EmployeeID],
-                    (err) => {
-                      if (err) {
-                        console.error('Error updating assignment:', err);
-                        return db.rollback(() => res.status(500).json({ message: 'Update error', error: err }));
-                      }
-
-                      // Commit transaction
-                      db.commit((err) => {
-                        if (err) {
-                          console.error('Error committing transaction:', err);
-                          return db.rollback(() => res.status(500).json({ message: 'Commit error', error: err }));
-                        }
-
-                        res.status(200).json({ message: 'Allocation updated successfully' });
-                      });
-                    }
-                  );
-                } else {
-                  // Insert new assignment
-                  db.query(
-                    'INSERT INTO projectassignments (ProjectID, EmployeeID, Allocation, Role, AllocationStartDate, AllocationEndDate, TimesheetApproval, BillingRate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                    [projectID, EmployeeID, Allocation, Role, AllocationStartDate, AllocationEndDate, TimesheetApproval, BillingRate],
-                    (err) => {
-                      if (err) {
-                        console.error('Error inserting new assignment:', err); // Log the error
-                        console.log('Failed data:', { projectID, EmployeeID, Allocation, Role, AllocationStartDate, AllocationEndDate, TimesheetApproval, BillingRate }); // Log the failed data
-                        return db.rollback(() => res.status(500).json({ message: 'Insert error', error: err }));
-                      }
-
-                      // Update employee status
-                      db.query(
-                        'UPDATE employees SET HasProjectAssigned = 1 WHERE EmployeeID = ?',
-                        [EmployeeID],
-                        (err) => {
-                          if (err) {
-                            console.error('Error updating employee status:', err);
-                            return db.rollback(() => res.status(500).json({ message: 'Update error', error: err }));
-                          }
-
-                          // Commit transaction
-                          db.commit((err) => {
-                            if (err) {
-                              console.error('Error committing transaction:', err);
-                              return db.rollback(() => res.status(500).json({ message: 'Commit error', error: err }));
-                            }
-
-                            res.status(200).json({ message: 'Allocation added successfully' });
-                          });
-                        }
-                      );
-                    }
-                  );
-                }
-              }
-            );
-          }
-        );
+  db.query(
+    insertQuery,
+    [
+      ClientID,
+      ProjectID,
+      EmployeeID,
+      AllocationStatus,
+      AllocationPercent,
+      AllocationStartDate,
+      AllocationEndDate,
+      AllocationTimeSheetApprover,
+      AllocationBillingRate,
+      ModifiedBy,
+    ],
+    (err, result) => {
+      if (err) {
+        console.error('Error inserting allocation:', err);
+        return res.status(500).json({ message: 'Internal Server Error', error: err });
       }
-    );
-  });
+
+      res.status(201).json({ message: 'Allocation added successfully', AllocationID: result.insertId });
+    }
+  );
 });
+
 
 // Done
 app.get('/employees', (req, res) => {
@@ -594,16 +671,17 @@ app.get('/employee-details/:employeeId/allocations', (req, res) => {
   });
 });
 //Done
-app.get('/project-details-all/:clientId/:projectId', (req, res) => {
+app.get('/project-details/:clientId/:projectId', (req, res) => {
   const { clientId, projectId } = req.params;
+  const { filter } = req.query; // 'active', 'closed', or 'all'
 
   if (!clientId || !projectId) {
     return res.status(400).send('Client ID and Project ID are required');
   }
 
-  const currentDate = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+  const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
-  // Query to get client and project names
+  // Fetch client and project names
   const nameQuery = `
     SELECT c.ClientName, p.ProjectName
     FROM Clients c
@@ -625,400 +703,67 @@ app.get('/project-details-all/:clientId/:projectId', (req, res) => {
     const clientName = nameResults[0].ClientName;
     const projectName = nameResults[0].ProjectName;
 
-    // Define queries for each filter
-    const activeQuery = `
-      SELECT * FROM Allocations
-      WHERE ClientID = ? AND ProjectID = ?
-        AND AllocationStatus IN ('Client Unallocated', 'Project Unallocated', 'Allocated')
-        AND AllocationStartDate <= ?
-        AND (AllocationEndDate >= ? OR AllocationEndDate IS NULL)
-    `;
-    const closedQuery = `
-      SELECT * FROM Allocations
-      WHERE ClientID = ? AND ProjectID = ?
-        AND (AllocationStatus = 'Closed' OR AllocationEndDate < ?)
-    `;
-    const allQuery = `
-      SELECT * FROM Allocations
-      WHERE ClientID = ? AND ProjectID = ?
-    `;
+    // Define query based on filter
+    let allocationQuery = '';
+    let queryParams = [];
 
-    // Execute all three queries concurrently
-    Promise.all([
-      new Promise((resolve, reject) => {
-        db.query(activeQuery, [clientId, projectId, currentDate, currentDate], (err, results) => {
-          if (err) return reject(err);
-          resolve(results);
-        });
-      }),
-      new Promise((resolve, reject) => {
-        db.query(closedQuery, [clientId, projectId, currentDate], (err, results) => {
-          if (err) return reject(err);
-          resolve(results);
-        });
-      }),
-      new Promise((resolve, reject) => {
-        db.query(allQuery, [clientId, projectId], (err, results) => {
-          if (err) return reject(err);
-          resolve(results);
-        });
-      })
-    ])
-    .then(([activeAllocations, closedAllocations, allAllocations]) => {
+    switch (filter) {
+      case 'active':
+        allocationQuery = `
+          SELECT a.*, e.EmployeeName, e.EmployeeRole
+          FROM Allocations a
+          INNER JOIN Employees e ON a.EmployeeID = e.EmployeeID
+          WHERE a.ClientID = ? AND a.ProjectID = ?
+            AND a.AllocationStatus IN ('Client Unallocated', 'Project Unallocated', 'Allocated')
+            AND a.AllocationStartDate <= ?
+            AND (a.AllocationEndDate >= ? OR a.AllocationEndDate IS NULL)
+        `;
+        queryParams = [clientId, projectId, currentDate, currentDate];
+        break;
+      case 'closed':
+        allocationQuery = `
+          SELECT a.*, e.EmployeeName, e.EmployeeRole
+          FROM Allocations a
+          INNER JOIN Employees e ON a.EmployeeID = e.EmployeeID
+          WHERE a.ClientID = ? AND a.ProjectID = ?
+            AND (a.AllocationStatus = 'Closed' OR a.AllocationEndDate < ?)
+        `;
+        queryParams = [clientId, projectId, currentDate];
+        break;
+      case 'all':
+        allocationQuery = `
+          SELECT a.*, e.EmployeeName, e.EmployeeRole
+          FROM Allocations a
+          INNER JOIN Employees e ON a.EmployeeID = e.EmployeeID
+          WHERE a.ClientID = ? AND a.ProjectID = ?
+        `;
+        queryParams = [clientId, projectId];
+        break;
+      default:
+        return res.status(400).send('Invalid filter');
+    }
+
+    db.query(allocationQuery, queryParams, (allocErr, allocResults) => {
+      if (allocErr) {
+        console.error('Error fetching allocations:', allocErr);
+        return res.status(500).send('Internal Server Error');
+      }
+
       res.json({
         clientName,
         projectName,
-        allocations: {
-          active: activeAllocations,
-          closed: closedAllocations,
-          all: allAllocations
-        }
-      });
-    })
-    .catch((err) => {
-      console.error('Error fetching allocations:', err);
-      res.status(500).send('Internal Server Error');
-    });
-  });
-});
-
-
-
-
-
-
-app.get('/client/:clientname/allprojects', (req, res) => {
-  const encodedclientName = req.params.clientname;
-  const ClientName = decodeURIComponent(encodedclientName); // Decode the URL-encoded project name
-  console.log(ClientName);
-  // First, query the Client table to get the ClientID
-  const getClientIDQuery = `
-    SELECT ClientID
-    FROM Clients
-    WHERE ClientName = ?
-  `;
-
-  db.query(getClientIDQuery, [ClientName], (err, results) => {
-    if (err) {
-      console.error('Error executing query to get ClientID:', err);
-      return res.status(500).send('Internal Server Error');
-    }
-    
-    if (results.length === 0) {
-      return res.status(404).send('Client not found');
-    }
-
-    const clientId = results[0].ClientID;
-
-    // Now, query the Projects table to get projects for this ClientID
-    const getProjectsQuery = `
-      SELECT ProjectID, ProjectName, Status, Category
-      FROM Projects
-      WHERE ClientID = ?
-    `;
-
-    db.query(getProjectsQuery, [clientId], (err, projects) => {
-      if (err) {
-        console.error('Error executing query to get projects:', err);
-        return res.status(500).send('Internal Server Error');
-      }
-      
-      if (projects.length === 0) {
-        return res.status(404).send('No projects found for this client');
-      }
-
-      res.json(projects);
-    });
-  });
-});
-// API endpoint to get employees working on a specific project by project name
-app.get('/project/:name/employees', (req, res) => {
-  // Extract the project name from the URL parameter
-  const encodedProjectName = req.params.name;
-  const projectName = decodeURIComponent(encodedProjectName); // Decode the URL-encoded project name
-  console.log(projectName);
-  // SQL query to search by project name
-  const query = `
-    SELECT e.EmployeeID,e.Role,e.EmployeeName, e.Email, pa.Allocation
-    FROM Employees e
-    JOIN ProjectAssignments pa ON e.EmployeeID = pa.EmployeeID
-    JOIN Projects p ON pa.ProjectID = p.ProjectID
-    WHERE p.ProjectName = ?
-  `;
-
-  db.query(query, [projectName], (err, results) => {
-    if (err) {
-      console.error('Error executing query:', err);
-      return res.status(500).send('Internal Server Error');
-    }
-    res.json(results);
-  });
-});
-
-
-
-// API to update allocation data
-app.put('/form/:employeeId', (req, res) => {
-  const employeeId = req.params.employeeId;
-  const { clientId, status, allocation } = req.body;
-
-  // Validate request body
-  if (clientId === undefined || status === undefined || allocation === undefined) {
-    return res.status(400).send('All fields are required');
-  }
-
-  if (isNaN(allocation)) {
-    return res.status(400).send('Invalid allocation percentage');
-  }
-
-  const validStatuses = ['allocated', 'unallocated'];
-  if (!validStatuses.includes(status)) {
-    return res.status(400).send('Invalid status');
-  }
-
-  // Update ProjectAssignments table
-  const updateQuery = `
-    UPDATE ProjectAssignments
-    SET Allocation = ?, Role = ?
-    WHERE EmployeeID = ? AND ProjectID IN (SELECT ProjectID FROM Projects WHERE ClientID = ?)
-  `;
-
-  db.query(updateQuery, [allocation, status, employeeId, clientId], (err, result) => {
-    if (err) {
-      console.error('Error executing update query:', err);
-      return res.status(500).send('Internal Server Error');
-    }
-
-    if (result.affectedRows === 0) {
-      return res.status(404).send('No project assignment found for this employee and client');
-    }
-
-    res.status(200).send('Allocation updated successfully');
-  });
-});
-
-
-
-
-
-
-
-
-app.post('/project/allocate-resource', (req, res) => {
-  console.log(req.body);
-  const { employeeName, projectName, Allocation } = req.body;
-
-  if (!employeeName || !projectName || !Allocation) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-
-  const formattedProjectName = projectName.replace(/-/g, ' ');
-
-  // Start a transaction
-  db.beginTransaction((err) => {
-    if (err) {
-      return res.status(500).json({ error: 'Transaction error', error: err });
-    }
-
-    // Check if the EmployeeID exists
-    db.query('SELECT EmployeeID FROM employees WHERE EmployeeName = ?', [employeeName], (err, employeeResults) => {
-      if (err) {
-        return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
-      }
-
-      if (employeeResults.length === 0) {
-        return db.rollback(() => res.status(404).json({ error: 'Employee not found' }));
-      }
-      const employeeID = employeeResults[0].EmployeeID;
-
-      // Check if the ProjectID exists
-      db.query('SELECT ProjectID FROM projects WHERE ProjectName = ?', [formattedProjectName], (err, projectResults) => {
-        if (err) {
-          return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
-        }
-
-        if (projectResults.length === 0) {
-          return db.rollback(() => res.status(404).json({ error: 'Project not found' }));
-        }
-        const projectID = projectResults[0].ProjectID;
-
-        // Check if the assignment already exists
-        db.query('SELECT * FROM projectassignments WHERE ProjectID = ? AND EmployeeID = ?', [projectID, employeeID], (err, assignmentResults) => {
-          if (err) {
-            return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
-          }
-
-          if (assignmentResults.length > 0) {
-            // Update existing assignment (if needed)
-            db.query(
-              'UPDATE projectassignments SET Allocation = ? WHERE ProjectID = ? AND EmployeeID = ?',
-              [Allocation, projectID, employeeID],
-              (err) => {
-                if (err) {
-                  return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
-                }
-
-                db.commit((err) => {
-                  if (err) {
-                    return db.rollback(() => res.status(500).json({ error: 'Commit error', error: err }));
-                  }
-
-                  res.status(200).json({ message: 'Allocation updated successfully' });
-                });
-              }
-            );
-          } else {
-            // Insert new assignment
-            db.query(
-              'INSERT INTO projectassignments (ProjectID, EmployeeID, Allocation) VALUES (?, ?, ?)',
-              [projectID, employeeID, Allocation],
-              (err) => {
-                if (err) {
-                  // Handle duplicate entry error specifically
-                  if (err.code === 'ER_DUP_ENTRY') {
-                    return db.rollback(() => res.status(409).json({ error: 'Duplicate entry for allocation' }));
-                  }
-
-                  return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
-                }
-
-                db.commit((err) => {
-                  if (err) {
-                    return db.rollback(() => res.status(500).json({ error: 'Commit error', error: err }));
-                  }
-
-                  res.status(201).json({ message: 'Resource allocated successfully' });
-                });
-              }
-            );
-          }
-        });
+        allocations: allocResults
       });
     });
   });
 });
+
+
+
+
+
 
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
-});
-
-
-app.get('/employees/client/innover', (req, res) => {
-  // SQL query to get employees who are only working for projects of client "Innover"
-  const query = `
-    SELECT e.EmployeeID, e.EmployeeName, e.Email, GROUP_CONCAT(DISTINCT p.ProjectName) AS ProjectNames, SUM(pa.Allocation) AS Allocation
-    FROM Employees e
-    JOIN ProjectAssignments pa ON e.EmployeeID = pa.EmployeeID
-    JOIN Projects p ON pa.ProjectID = p.ProjectID
-    JOIN Clients c ON p.ClientID = c.ClientID
-    GROUP BY e.EmployeeID, e.EmployeeName, e.Email
-    HAVING COUNT(DISTINCT c.ClientID) = 1 AND MIN(c.ClientName) = 'Innover';
-  `;
-
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error('Error executing query:', err);
-      return res.status(500).send('Internal Server Error');
-    }
-    if (results.length === 0) {
-      return res.status(404).send('No employees found for the client "Innover"');
-    }
-    res.json(results);
-  });
-});
-
-
-app.post('/project/allocate-resource', (req, res) => {
-  console.log(req.body);
-  const { employeeName, projectName, Allocation } = req.body;
- 
-  if (!employeeName || !projectName || !Allocation) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
- 
-  const formattedProjectName = projectName.replace(/-/g, ' ');
- 
-  // Start a transaction
-  db.beginTransaction((err) => {
-    if (err) {
-      return res.status(500).json({ error: 'Transaction error', error: err });
-    }
- 
-    // Check if the EmployeeID exists
-    db.query('SELECT EmployeeID FROM employees WHERE EmployeeName = ?', [employeeName], (err, employeeResults) => {
-      if (err) {
-        return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
-      }
- 
-      if (employeeResults.length === 0) {
-        return db.rollback(() => res.status(404).json({ error: 'Employee not found' }));
-      }
-      const employeeID = employeeResults[0].EmployeeID;
- 
-      // Check if the ProjectID exists
-      db.query('SELECT ProjectID FROM projects WHERE ProjectName = ?', [formattedProjectName], (err, projectResults) => {
-        if (err) {
-          return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
-        }
- 
-        if (projectResults.length === 0) {
-          return db.rollback(() => res.status(404).json({ error: 'Project not found' }));
-        }
-        const projectID = projectResults[0].ProjectID;
- 
-        // Check if the assignment already exists
-        db.query('SELECT * FROM projectassignments WHERE ProjectID = ? AND EmployeeID = ?', [projectID, employeeID], (err, assignmentResults) => {
-          if (err) {
-            return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
-          }
- 
-          if (assignmentResults.length > 0) {
-            // Update existing assignment (if needed)
-            db.query(
-              'UPDATE projectassignments SET Allocation = ? WHERE ProjectID = ? AND EmployeeID = ?',
-              [Allocation, projectID, employeeID],
-              (err) => {
-                if (err) {
-                  return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
-                }
- 
-                db.commit((err) => {
-                  if (err) {
-                    return db.rollback(() => res.status(500).json({ error: 'Commit error', error: err }));
-                  }
- 
-                  res.status(200).json({ message: 'Allocation updated successfully' });
-                });
-              }
-            );
-          } else {
-            // Insert new assignment
-            db.query(
-              'INSERT INTO projectassignments (ProjectID, EmployeeID, Allocation) VALUES (?, ?, ?)',
-              [projectID, employeeID, Allocation],
-              (err) => {
-                if (err) {
-                  // Handle duplicate entry error specifically
-                  if (err.code === 'ER_DUP_ENTRY') {
-                    return db.rollback(() => res.status(409).json({ error: 'Duplicate entry for allocation' }));
-                  }
- 
-                  return db.rollback(() => res.status(500).json({ error: 'Database query error', error: err }));
-                }
- 
-                db.commit((err) => {
-                  if (err) {
-                    return db.rollback(() => res.status(500).json({ error: 'Commit error', error: err }));
-                  }
- 
-                  res.status(201).json({ message: 'Resource allocated successfully' });
-                });
-              }
-            );
-          }
-        });
-      });
-    });
-  });
 });
