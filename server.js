@@ -7,7 +7,7 @@ const port = 8080;
 
 // MySQL database connection
 
-
+//just a push
 // Middleware
 app.use(cors()); // Enable CORS
 app.use(express.json()); // Parse JSON bodies
