@@ -594,9 +594,8 @@ app.get('/employee-details/:employeeId/allocations', (req, res) => {
   });
 });
 //Done
-app.get('/project-details/:clientId/:projectId', (req, res) => {
+app.get('/project-details-all/:clientId/:projectId', (req, res) => {
   const { clientId, projectId } = req.params;
-  const filter = req.query.filter ? req.query.filter.toLowerCase() : 'all';
 
   if (!clientId || !projectId) {
     return res.status(400).send('Client ID and Project ID are required');
@@ -604,127 +603,85 @@ app.get('/project-details/:clientId/:projectId', (req, res) => {
 
   const currentDate = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
 
-  // Base query with JOINs to get ClientName and ProjectName
-  let query = `
-    SELECT 
-      c.ClientName,
-      p.ProjectName,
-      e.EmployeeID,
-      e.EmployeeName,
-      e.EmployeeRole,
-      e.EmployeeContractType,
-      a.AllocationStatus,
-      a.AllocationPercent,
-      a.AllocationBillingType,
-      a.AllocationBilledCheck,
-      a.AllocationBillingRate,
-      a.AllocationTimeSheetApprover,
-      a.AllocationStartDate,
-      a.AllocationEndDate,
-      a.ModifiedBy,
-      a.ModifiedAt
-    FROM Allocations a
-    INNER JOIN Employees e ON a.EmployeeID = e.EmployeeID
-    INNER JOIN Clients c ON a.ClientID = c.ClientID
-    INNER JOIN Projects p ON a.ProjectID = p.ProjectID
-    WHERE a.ClientID = ? AND a.ProjectID = ?
+  // Query to get client and project names
+  const nameQuery = `
+    SELECT c.ClientName, p.ProjectName
+    FROM Clients c
+    INNER JOIN Projects p ON c.ClientID = p.ClientID
+    WHERE c.ClientID = ? AND p.ProjectID = ?
+    LIMIT 1
   `;
 
-  const queryParams = [clientId, projectId];
-
-  // Modify the query based on the filter
-  if (filter === 'active') {
-    query += `
-      AND (
-        a.AllocationStatus IN (?, ?, ?)
-        AND a.AllocationStartDate <= ?
-        AND (a.AllocationEndDate >= ? OR a.AllocationEndDate IS NULL)
-      )
-    `;
-    queryParams.push('Client Unallocated', 'Project Unallocated', 'Allocated', currentDate, currentDate);
-  } else if (filter === 'closed') {
-    query += `
-      AND (
-        a.AllocationStatus = ?
-        OR a.AllocationEndDate < ?
-      )
-    `;
-    queryParams.push('Closed', currentDate);
-  }
-  // 'all' requires no additional filtering
-
-  // Optional: Log the query and parameters for debugging
-  console.log('Executing Query:', query);
-  console.log('With Parameters:', queryParams);
-
-  db.query(query, queryParams, (err, results) => {
-    if (err) {
-      console.error('Error fetching project details:', err);
+  db.query(nameQuery, [clientId, projectId], (nameErr, nameResults) => {
+    if (nameErr) {
+      console.error('Error fetching client/project names:', nameErr);
       return res.status(500).send('Internal Server Error');
     }
 
-    if (results.length === 0) {
-      // Instead of 404, return 200 with empty allocations
-      // Optionally, fetch ClientName and ProjectName separately if needed
-      // For simplicity, returning empty allocations with placeholder names
-
-      // To fetch ClientName and ProjectName even if allocations are empty
-      const nameQuery = `
-        SELECT c.ClientName, p.ProjectName
-        FROM Clients c
-        INNER JOIN Projects p ON c.ClientID = p.ClientID
-        WHERE c.ClientID = ? AND p.ProjectID = ?
-        LIMIT 1
-      `;
-      db.query(nameQuery, [clientId, projectId], (nameErr, nameResults) => {
-        if (nameErr) {
-          console.error('Error fetching client/project names:', nameErr);
-          return res.status(500).send('Internal Server Error');
-        }
-
-        if (nameResults.length === 0) {
-          return res.status(404).send('Project not found');
-        }
-
-        const clientName = nameResults[0].ClientName;
-        const projectName = nameResults[0].ProjectName;
-
-        res.json({
-          clientName,
-          projectName,
-          allocations: [] // Empty allocations
-        });
-      });
-
-      return;
+    if (nameResults.length === 0) {
+      return res.status(404).send('Project not found');
     }
 
-    const clientName = results[0].ClientName;
-    const projectName = results[0].ProjectName;
-    const allocations = results.map(row => ({
-      EmployeeID: row.EmployeeID,
-      EmployeeName: row.EmployeeName,
-      EmployeeRole: row.EmployeeRole,
-      EmployeeContractType: row.EmployeeContractType,
-      AllocationStatus: row.AllocationStatus,
-      AllocationPercent: row.AllocationPercent,
-      AllocationBillingType: row.AllocationBillingType,
-      AllocationBilledCheck: row.AllocationBilledCheck,
-      AllocationBillingRate: row.AllocationBillingRate,
-      AllocationTimeSheetApprover: row.AllocationTimeSheetApprover,
-      AllocationStartDate: row.AllocationStartDate,
-      AllocationEndDate: row.AllocationEndDate,
-      ModifiedBy: row.ModifiedBy,
-      ModifiedAt: row.ModifiedAt
-    }));
+    const clientName = nameResults[0].ClientName;
+    const projectName = nameResults[0].ProjectName;
 
-    res.json({
-      clientName,
-      projectName,
-      allocations
+    // Define queries for each filter
+    const activeQuery = `
+      SELECT * FROM Allocations
+      WHERE ClientID = ? AND ProjectID = ?
+        AND AllocationStatus IN ('Client Unallocated', 'Project Unallocated', 'Allocated')
+        AND AllocationStartDate <= ?
+        AND (AllocationEndDate >= ? OR AllocationEndDate IS NULL)
+    `;
+    const closedQuery = `
+      SELECT * FROM Allocations
+      WHERE ClientID = ? AND ProjectID = ?
+        AND (AllocationStatus = 'Closed' OR AllocationEndDate < ?)
+    `;
+    const allQuery = `
+      SELECT * FROM Allocations
+      WHERE ClientID = ? AND ProjectID = ?
+    `;
+
+    // Execute all three queries concurrently
+    Promise.all([
+      new Promise((resolve, reject) => {
+        db.query(activeQuery, [clientId, projectId, currentDate, currentDate], (err, results) => {
+          if (err) return reject(err);
+          resolve(results);
+        });
+      }),
+      new Promise((resolve, reject) => {
+        db.query(closedQuery, [clientId, projectId, currentDate], (err, results) => {
+          if (err) return reject(err);
+          resolve(results);
+        });
+      }),
+      new Promise((resolve, reject) => {
+        db.query(allQuery, [clientId, projectId], (err, results) => {
+          if (err) return reject(err);
+          resolve(results);
+        });
+      })
+    ])
+    .then(([activeAllocations, closedAllocations, allAllocations]) => {
+      res.json({
+        clientName,
+        projectName,
+        allocations: {
+          active: activeAllocations,
+          closed: closedAllocations,
+          all: allAllocations
+        }
+      });
+    })
+    .catch((err) => {
+      console.error('Error fetching allocations:', err);
+      res.status(500).send('Internal Server Error');
     });
   });
 });
+
 
 
 
