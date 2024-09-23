@@ -5,10 +5,6 @@ import db from './dbSetup.js';
 const app = express();
 const port = 8080;
 
-// MySQL database connection
-
-//just a push
-// Middleware
 app.use(cors()); // Enable CORS
 app.use(express.json()); // Parse JSON bodies
 
@@ -136,14 +132,7 @@ app.delete('/allocations/:allocationId', (req, res) => {
 
     res.json({ message: 'Allocation deleted successfully' });
   });
-});
-
-// Middleware to parse JSON bodies
-app.use(express.json());
-
-// POST /api/allocate - Create a new allocation
-// app.post('/api/allocate', ...)
-
+})
 app.post('/api/allocate', (req, res) => {
   const {
     EmployeeID,
@@ -230,8 +219,6 @@ app.post('/api/allocate', (req, res) => {
     }
   );
 });
-
-
 // Done
 app.get('/employees', (req, res) => {
   const query = `
@@ -757,13 +744,6 @@ app.get('/project-details/:clientId/:projectId', (req, res) => {
     });
   });
 });
-
-
-
-
-
-
-
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
