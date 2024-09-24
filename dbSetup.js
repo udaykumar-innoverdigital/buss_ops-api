@@ -102,7 +102,7 @@ function createTables(tables) {
         AllocationBillingType VARCHAR(100),
         AllocationBilledCheck VARCHAR(100),
         AllocationBillingRate DECIMAL(10, 2),
-        AllocationTimeSheetApprover ENUM('Rajendra', 'Kiran', 'Shishir') DEFAULT 'Rajendra',
+        AllocationTimeSheetApprover VARCHAR(100),
         AllocationStartDate DATE NOT NULL,
         AllocationEndDate DATE,
         ModifiedBy VARCHAR(100),

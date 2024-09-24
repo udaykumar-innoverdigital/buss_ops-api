@@ -9,10 +9,18 @@ app.use(cors()); // Enable CORS
 app.use(express.json()); // Parse JSON bodies
 
 
-// In your Express app
 app.get('/modal/data', (req, res) => {
   const clientsQuery = `SELECT ClientID, ClientName FROM Clients`;
-  const projectsQuery = `SELECT ProjectID, ProjectName, ClientID FROM Projects`;
+  const projectsQuery = `SELECT ProjectID, ProjectName, ClientID, ProjectManager FROM Projects`;
+  const timeSheetApproversQuery = `
+    SELECT DISTINCT EmployeeName AS Name
+    FROM Employees
+    WHERE EmployeeRole = 'Time Sheet Approver'
+    UNION
+    SELECT DISTINCT ProjectManager AS Name
+    FROM Projects
+    WHERE ProjectManager IS NOT NULL
+  `;
 
   db.query(clientsQuery, (err, clients) => {
     if (err) {
@@ -26,10 +34,25 @@ app.get('/modal/data', (req, res) => {
         return res.status(500).json({ error: 'Internal Server Error' });
       }
 
-      res.json({ clients, projects });
+      db.query(timeSheetApproversQuery, (err, timeSheetApprovers) => {
+        if (err) {
+          console.error('Error fetching time sheet approvers:', err);
+          return res.status(500).json({ error: 'Internal Server Error' });
+        }
+
+        // Extract unique time sheet approvers
+        const uniqueApprovers = [...new Set(timeSheetApprovers.map(approver => approver.Name))];
+
+        res.json({
+          clients,
+          projects,
+          timeSheetApprovers: uniqueApprovers
+        });
+      });
     });
   });
 });
+
 app.get('/modal/data/:allocationId', (req, res) => {
   const { allocationId } = req.params;
 
