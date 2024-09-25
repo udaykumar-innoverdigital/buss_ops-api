@@ -1,4 +1,5 @@
 import mysql from 'mysql';
+import util from 'util';
 
 // MySQL database connection
 const db = mysql.createConnection({
@@ -7,6 +8,8 @@ const db = mysql.createConnection({
   password: 'Innover@2024',
   database: 'ninja',
 });
+
+db.query = util.promisify(db.query);
 
 // Connect to the database
 db.connect((err) => {

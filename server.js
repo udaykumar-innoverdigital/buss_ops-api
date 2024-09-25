@@ -10,6 +10,130 @@ const port = 8080;
 app.use(cors()); // Enable CORS
 app.use(express.json()); // Parse JSON bodies
 
+// API to get BizOps card counts
+app.get('/bizops/card', async (req, res) => {
+  try {
+    // Define the queries to get the count of various data
+    const totalEmployeesQuery = `
+      SELECT COUNT(DISTINCT e.EmployeeId) AS totalEmployees
+      FROM Employees e
+      WHERE e.EmployeeKekaStatus = 'Active'
+    `;
+ 
+    const unallocatedEmployeesQuery = `
+      SELECT COUNT(DISTINCT e.EmployeeId) AS unallocatedEmployees
+      FROM Employees e
+      LEFT JOIN Allocations a ON e.EmployeeId = a.EmployeeID
+        AND a.AllocationStatus NOT IN ('Closed')
+        AND CURRENT_DATE() BETWEEN a.AllocationStartDate AND IFNULL(a.AllocationEndDate, CURRENT_DATE())
+      WHERE e.EmployeeKekaStatus = 'Active'
+      AND a.AllocationID IS NULL -- No project for the current date
+    `;
+ 
+    const draftAllocationsQuery = `
+      SELECT COUNT(DISTINCT e.EmployeeId) AS draftEmployees
+      FROM Employees e
+      LEFT JOIN (
+        SELECT EmployeeID, SUM(AllocationPercent) AS current_allocation
+        FROM Allocations
+        WHERE CURRENT_DATE() BETWEEN AllocationStartDate AND IFNULL(AllocationEndDate, CURRENT_DATE())
+        GROUP BY EmployeeID
+      ) a ON e.EmployeeId = a.EmployeeID
+      WHERE e.EmployeeKekaStatus = 'Active'
+      AND a.current_allocation > 0
+      AND a.current_allocation < 100
+    `;
+ 
+    const inProgressProjectsQuery = `
+      SELECT COUNT(*) AS activeProjects
+      FROM Projects
+      WHERE ProjectStatus = 'In Progress'
+    `;
+ 
+    // Perform database queries in parallel
+    const [totalEmployeesResult, unallocatedEmployeesResult, draftAllocationsResult, activeProjectsResult] = await Promise.all([
+      db.query(totalEmployeesQuery),
+      db.query(unallocatedEmployeesQuery),
+      db.query(draftAllocationsQuery),
+      db.query(inProgressProjectsQuery)
+    ]);
+ 
+    // Ensure the results are valid arrays before accessing their elements
+    const totalEmployees = totalEmployeesResult && totalEmployeesResult[0] ? totalEmployeesResult[0].totalEmployees : 0;
+    const unallocatedEmployees = unallocatedEmployeesResult && unallocatedEmployeesResult[0] ? unallocatedEmployeesResult[0].unallocatedEmployees : 0;
+    const draftEmployees = draftAllocationsResult && draftAllocationsResult[0] ? draftAllocationsResult[0].draftEmployees : 0;
+    const activeProjects = activeProjectsResult && activeProjectsResult[0] ? activeProjectsResult[0].activeProjects : 0;
+ 
+    // Send the response with counts
+    res.json({
+      totalEmployees,
+      unallocatedEmployees,
+      draftEmployees,
+      activeProjects,
+    });
+ 
+  } catch (error) {
+    console.error('Error fetching BizOps card data:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+app.get('/master-allocations', (req, res) => {
+  const { startDate, endDate } = req.query;
+
+  // Base query with necessary joins
+  let query = `
+    SELECT 
+      a.AllocationID, a.EmployeeID, 
+      e.EmployeeName, e.EmployeeLocation, e.EmployeeContractType,
+      e.EmployeeJoiningDate, e.EmployeeEndingDate, e.EmployeeStudio,
+      e.EmployeeSubStudio, e.EmployeeRole, e.EmployeeTYOE, e.EmployeeKekaStatus,
+      a.ClientID, c.ClientName, c.ClientPartner,
+      a.ProjectID, p.ProjectName, p.ProjectManager,
+      a.AllocationStatus, a.AllocationPercent, a.AllocationBillingType,
+      a.AllocationBilledCheck, a.AllocationBillingRate, a.AllocationTimeSheetApprover,
+      a.AllocationStartDate, a.AllocationEndDate, a.ModifiedBy, a.ModifiedAt
+    FROM 
+      Allocations a
+    LEFT JOIN 
+      Employees e ON a.EmployeeID = e.EmployeeId
+    LEFT JOIN 
+      Clients c ON a.ClientID = c.ClientID
+    LEFT JOIN 
+      Projects p ON a.ProjectID = p.ProjectID
+  `;
+
+  // Add WHERE clause if startDate and/or endDate are provided
+  const conditions = [];
+  const values = [];
+
+  if (startDate) {
+    conditions.push(`a.AllocationStartDate >= ?`);
+    values.push(startDate);
+  }
+
+  if (endDate) {
+    conditions.push(`a.AllocationEndDate <= ?`);
+    values.push(endDate);
+  }
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  // Add LIMIT to prevent overwhelming results
+  query += ' LIMIT 1000;';
+
+  db.query(query, values, (err, results) => {
+    if (err) {
+      console.error('Error fetching master allocations:', err);
+      return res.status(500).json({ message: 'Internal Server Error' });
+    }
+    res.json({ masterAllocations: results });
+  });
+});
+
+
 app.get('/employees/search', (req, res) => {
   const { query } = req.query;
   if (!query) {
