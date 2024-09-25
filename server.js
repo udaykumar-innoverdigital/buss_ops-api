@@ -10,8 +10,109 @@ const port = 8080;
 app.use(cors()); // Enable CORS
 app.use(express.json()); // Parse JSON bodies
 
+app.get('/employees/search', (req, res) => {
+  const { query } = req.query;
+  if (!query) {
+    return res.status(400).json({ message: 'Query parameter is required.' });
+  }
 
-// Backend: Update /modal/data Endpoint with Employee and Project Filters
+  const searchQuery = `
+    SELECT EmployeeId, EmployeeName
+    FROM Employees
+    WHERE EmployeeName LIKE ? OR EmployeeId LIKE ?
+    LIMIT 20
+  `;
+  const likeQuery = `%${query}%`;
+
+  db.query(searchQuery, [likeQuery, likeQuery], (err, results) => {
+    if (err) {
+      console.error('Error searching employees:', err);
+      return res.status(500).json({ message: 'Internal Server Error' });
+    }
+    res.json({ employees: results });
+  });
+});
+
+// New API Endpoint: /project-allocate/form/data
+app.get('/project-allocate/form/data', async (req, res) => {
+  const { employeeName, employeeId, startDate, endDate } = req.query;
+
+  // Validate input
+  if ((!employeeName && !employeeId) || !startDate || !endDate) {
+    return res.status(400).json({ message: 'employeeName or employeeId, startDate, and endDate are required.' });
+  }
+
+  try {
+    let employee;
+
+    if (employeeName) {
+      // Fetch employee by name
+      const nameQuery = `SELECT EmployeeId, EmployeeName FROM Employees WHERE EmployeeName = ? AND EmployeeKekaStatus = 'Active' LIMIT 1`;
+      const nameResult = await new Promise((resolve, reject) => {
+        db.query(nameQuery, [employeeName], (err, results) => {
+          if (err) reject(err);
+          else resolve(results);
+        });
+      });
+
+      if (nameResult.length === 0) {
+        return res.status(404).json({ message: 'Employee not found with the provided name.' });
+      }
+
+      employee = nameResult[0];
+    } else if (employeeId) {
+      // Fetch employee by ID
+      const idQuery = `SELECT EmployeeId, EmployeeName FROM Employees WHERE EmployeeId = ? AND EmployeeKekaStatus = 'Active' LIMIT 1`;
+      const idResult = await new Promise((resolve, reject) => {
+        db.query(idQuery, [employeeId], (err, results) => {
+          if (err) reject(err);
+          else resolve(results);
+        });
+      });
+
+      if (idResult.length === 0) {
+        return res.status(404).json({ message: 'Employee not found with the provided ID.' });
+      }
+
+      employee = idResult[0];
+    }
+
+    // Fetch allocation data for the employee within the date range
+    const allocationQuery = `
+      SELECT 
+        AllocationPercent 
+      FROM Allocations 
+      WHERE EmployeeID = ? 
+        AND (
+          (AllocationStartDate <= ? AND (AllocationEndDate >= ? OR AllocationEndDate IS NULL))
+        )
+        AND AllocationStatus IN ('Client Unallocated', 'Project Unallocated', 'Allocated')
+    `;
+
+    const allocationResults = await new Promise((resolve, reject) => {
+      db.query(allocationQuery, [employee.EmployeeId, endDate, startDate], (err, results) => {
+        if (err) reject(err);
+        else resolve(results);
+      });
+    });
+
+    // Calculate total allocation
+    const totalAllocation = allocationResults.reduce((sum, alloc) => sum + alloc.AllocationPercent, 0);
+
+    res.json({
+      employeeId: employee.EmployeeId,
+      employeeName: employee.EmployeeName,
+      allocationData: {
+        allocated: totalAllocation,
+        unallocated: 100 - totalAllocation,
+      },
+    });
+  } catch (error) {
+    console.error('Error in /project-allocate/form/data:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
 
 app.get('/modal/data', (req, res) => {
   const clientsQuery = `SELECT ClientID, ClientName FROM Clients`;
