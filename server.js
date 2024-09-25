@@ -17,10 +17,11 @@ app.get('/employees/search', (req, res) => {
   }
 
   const searchQuery = `
-    SELECT EmployeeId, EmployeeName
-    FROM Employees
-    WHERE EmployeeName LIKE ? OR EmployeeId LIKE ?
-    LIMIT 20
+      SELECT EmployeeId, EmployeeName
+      FROM Employees
+      WHERE (EmployeeName LIKE ? OR EmployeeId LIKE ?)
+        AND EmployeeKekaStatus = 'Active'
+      LIMIT 20;
   `;
   const likeQuery = `%${query}%`;
 
