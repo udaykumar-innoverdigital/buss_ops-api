@@ -545,7 +545,7 @@ app.put('/allocations/:allocationId', (req, res) => {
             AllocationStartDate,
             AllocationEndDate,
             AllocationTimeSheetApprover,
-            AllocationBilledCheck === 'Yes' ? AllocationBillingRate : null,
+            AllocationBilledCheck === 'Yes' ? AllocationBillingRate : 0.00,
             AllocationBillingType,
             AllocationBilledCheck,
             ModifiedBy,
@@ -586,6 +586,7 @@ app.delete('/allocations/:allocationId', (req, res) => {
     res.json({ message: 'Allocation deleted successfully' });
   });
 })
+
 app.post('/api/allocate', (req, res) => {
   const {
     EmployeeID,
@@ -612,7 +613,7 @@ app.post('/api/allocate', (req, res) => {
     !AllocationStatus ||
     AllocationPercent === undefined ||
     !AllocationStartDate ||
-    !AllocationBillingRate ||
+    AllocationBillingRate === undefined ||
     !AllocationBillingType ||
     !AllocationBilledCheck
   ) {
@@ -649,110 +650,101 @@ app.post('/api/allocate', (req, res) => {
     return res.status(400).json({ message: 'Start Date cannot be before January 1, 2020.' });
   }
 
-  // Fetch current and staged allocations
-  const totalAllocationQuery = `
+  // Fetch current and staged allocations within the date range
+  const allocationQuery = `
     SELECT 
-      IFNULL(SUM(AllocationPercent), 0) AS totalAllocation 
-    FROM Allocations 
-    WHERE EmployeeID = ? AND AllocationStatus IN ('Active', 'Allocated')
-  `;
-  const stagedAllocationQuery = `
-    SELECT 
-      IFNULL(SUM(AllocationPercent), 0) AS stagedAllocation 
-    FROM Allocations 
-    WHERE EmployeeID = ? AND AllocationStatus = 'Staged'
+      IFNULL(SUM(CASE WHEN AllocationStatus IN ('Active', 'Allocated') THEN AllocationPercent ELSE 0 END), 0) AS totalAllocation,
+      IFNULL(SUM(CASE WHEN AllocationStatus = 'Staged' THEN AllocationPercent ELSE 0 END), 0) AS stagedAdditions
+    FROM Allocations
+    WHERE 
+      EmployeeID = ? AND 
+      (
+        (AllocationStartDate <= ? AND (AllocationEndDate >= ? OR AllocationEndDate IS NULL))
+      )
   `;
 
-  db.query(totalAllocationQuery, [EmployeeID], (err, totalResult) => {
+  db.query(allocationQuery, [EmployeeID, AllocationEndDate || '9999-12-31', AllocationStartDate], (err, results) => {
     if (err) {
-      console.error('Error fetching total allocations:', err);
+      console.error('Error fetching allocations:', err);
       return res.status(500).json({ message: 'Internal Server Error' });
     }
 
-    const totalAllocation = totalResult[0].totalAllocation;
+    const { totalAllocation, stagedAdditions } = results[0];
+    const newTotal = totalAllocation + stagedAdditions + AllocationPercent;
 
-    db.query(stagedAllocationQuery, [EmployeeID], (err, stagedResult) => {
+    if (newTotal > 100) {
+      return res.status(400).json({ message: 'Total allocation percentage cannot exceed 100%.' });
+    }
+
+    // Check for overlapping allocations
+    const overlapQuery = `
+      SELECT *
+      FROM Allocations
+      WHERE EmployeeID = ?
+        AND ProjectID = ?
+        AND AllocationStatus IN ('Allocated', 'Active', 'Project Unallocated', 'Client Unallocated')
+        AND (
+          (AllocationStartDate <= ? AND (AllocationEndDate >= ? OR AllocationEndDate IS NULL))
+        )
+    `;
+
+    db.query(overlapQuery, [EmployeeID, ProjectID, AllocationEndDate || '9999-12-31', AllocationStartDate], (err, overlapResults) => {
       if (err) {
-        console.error('Error fetching staged allocations:', err);
+        console.error('Error checking overlapping allocations:', err);
         return res.status(500).json({ message: 'Internal Server Error' });
       }
 
-      const stagedAllocation = stagedResult[0].stagedAllocation;
-      const newTotal = totalAllocation + stagedAllocation + AllocationPercent;
-
-      if (newTotal > 100) {
-        return res.status(400).json({ message: 'Total allocation percentage cannot exceed 100%.' });
+      if (overlapResults.length > 0) {
+        return res.status(400).json({ message: 'Allocation overlaps with an existing allocation for the same project and employee.' });
       }
 
-      // Check for overlapping allocations
-      const overlapQuery = `
-        SELECT *
-        FROM Allocations
-        WHERE EmployeeID = ?
-          AND ProjectID = ?
-          AND AllocationStatus IN ('Allocated', 'Active', 'Project Unallocated', 'Client Unallocated')
-          AND (
-            (AllocationStartDate <= ? AND (AllocationEndDate >= ? OR AllocationEndDate IS NULL))
-          )
+      // Proceed with insertion
+      const insertQuery = `
+        INSERT INTO Allocations (
+          ClientID,
+          ProjectID,
+          EmployeeID,
+          AllocationStatus,
+          AllocationPercent,
+          AllocationStartDate,
+          AllocationEndDate,
+          AllocationTimeSheetApprover,
+          AllocationBillingRate,
+          AllocationBillingType,
+          AllocationBilledCheck,
+          ModifiedBy
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
-      db.query(overlapQuery, [EmployeeID, ProjectID, AllocationEndDate || '9999-12-31', AllocationStartDate], (err, results) => {
-        if (err) {
-          console.error('Error checking overlapping allocations:', err);
-          return res.status(500).json({ message: 'Internal Server Error' });
-        }
-
-        if (results.length > 0) {
-          return res.status(400).json({ message: 'Allocation overlaps with an existing allocation for the same project and employee.' });
-        }
-
-        // Proceed with insertion
-        const insertQuery = `
-          INSERT INTO Allocations (
-            ClientID,
-            ProjectID,
-            EmployeeID,
-            AllocationStatus,
-            AllocationPercent,
-            AllocationStartDate,
-            AllocationEndDate,
-            AllocationTimeSheetApprover,
-            AllocationBillingRate,
-            AllocationBillingType,
-            AllocationBilledCheck,
-            ModifiedBy
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-
-        db.query(
-          insertQuery,
-          [
-            ClientID,
-            ProjectID,
-            EmployeeID,
-            AllocationStatus,
-            AllocationPercent,
-            AllocationStartDate,
-            AllocationEndDate,
-            AllocationTimeSheetApprover,
-            AllocationBilledCheck === 'Yes' ? AllocationBillingRate : null,
-            AllocationBillingType,
-            AllocationBilledCheck,
-            ModifiedBy,
-          ],
-          (err, result) => {
-            if (err) {
-              console.error('Error inserting allocation:', err);
-              return res.status(500).json({ message: 'Internal Server Error', error: err });
-            }
-
-            res.status(201).json({ message: 'Allocation added successfully', AllocationID: result.insertId });
+      db.query(
+        insertQuery,
+        [
+          ClientID,
+          ProjectID,
+          EmployeeID,
+          AllocationStatus,
+          AllocationPercent,
+          AllocationStartDate,
+          AllocationEndDate || null,
+          AllocationTimeSheetApprover,
+          AllocationBilledCheck === 'Yes' ? AllocationBillingRate : null, // Consistent with React
+          AllocationBillingType,
+          AllocationBilledCheck,
+          ModifiedBy,
+        ],
+        (err, result) => {
+          if (err) {
+            console.error('Error inserting allocation:', err);
+            return res.status(500).json({ message: 'Internal Server Error', error: err });
           }
-        );
-      });
+
+          res.status(201).json({ message: 'Allocation added successfully', AllocationID: result.insertId });
+        }
+      );
     });
   });
 });
+
 
 // Done
 app.get('/employees', (req, res) => {
