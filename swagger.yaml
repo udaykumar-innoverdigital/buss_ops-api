@@ -1,302 +1,226 @@
 openapi: 3.0.0
 info:
-  title: Employee Allocation API
-  description: API for managing employee allocations, clients, and projects.
+  title: Resource Management API
+  description: API for managing employee allocations, projects, and clients.
   version: 1.0.0
 servers:
-  - url: http://localhost:5000
+  - url: http://localhost:8080
+    description: Local server
+
 paths:
-  /employees/todo:
+  /bizops/card:
     get:
-      summary: Get employees with zero allocation
+      summary: Get BizOps card data
+      description: Fetch counts of total employees, unallocated employees, draft employees, and in-progress projects.
       responses:
         '200':
-          description: A list of employees with zero allocation
+          description: Successfully retrieved BizOps card data
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    EmployeeID:
-                      type: integer
-                    EmployeeName:
-                      type: string
-                    Email:
-                      type: string
-                    Allocation:
-                      type: integer
-  /employees/drafts:
-    get:
-      summary: Get employees with allocations
-      responses:
-        '200':
-          description: A list of employees with allocations
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    EmployeeID:
-                      type: integer
-                    EmployeeName:
-                      type: string
-                    Email:
-                      type: string
-                    Allocation:
-                      type: integer
-        '404':
-          description: No employees with allocations found
-  /api/allocate:
-    put:
-      summary: Allocate a project to an employee
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                EmployeeID:
-                  type: integer
-                ClientName:
-                  type: string
-                ProjectName:
-                  type: string
-                Allocation:
-                  type: integer
-                Role:
-                  type: string
-                AllocationStartDate:
-                  type: string
-                  format: date
-                AllocationEndDate:
-                  type: string
-                  format: date
-                TimesheetApproval:
-                  type: boolean
-                BillingRate:
-                  type: number
-                  format: float
-      responses:
-        '200':
-          description: Allocation updated successfully or added
-        '400':
-          description: Required fields are missing
-        '404':
-          description: Client or project not found
+                type: object
+                properties:
+                  totalEmployees:
+                    type: integer
+                  unallocatedEmployees:
+                    type: integer
+                  draftEmployees:
+                    type: integer
+                  activeProjects:
+                    type: integer
         '500':
-          description: Internal server error
-  /employees:
+          description: Internal Server Error
+
+  /master-allocations:
     get:
-      summary: Get all employees with their allocation
-      responses:
-        '200':
-          description: A list of employees with their allocations
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    EmployeeID:
-                      type: integer
-                    EmployeeName:
-                      type: string
-                    Email:
-                      type: string
-                    Allocation:
-                      type: integer
-  /clients:
-    get:
-      summary: Get all clients
-      responses:
-        '200':
-          description: A list of clients
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    ClientID:
-                      type: integer
-                    ClientName:
-                      type: string
-                    Status:
-                      type: string
-                    Country:
-                      type: string
-                    StartDate:
-                      type: string
-                      format: date
-                    EndDate:
-                      type: string
-                      format: date
-                    NoOfProjects:
-                      type: integer
-                    NoOfEmployees:
-                      type: integer
-  /client/{clientId}/projects:
-    get:
-      summary: Get projects for a specific client
+      summary: Get master allocations data
       parameters:
-        - in: path
-          name: clientId
-          required: true
+        - in: query
+          name: startDate
           schema:
-            type: integer
+            type: string
+            format: date
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
       responses:
         '200':
-          description: A list of projects for the client
+          description: Successfully retrieved master allocations data
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    ProjectID:
-                      type: integer
-                    ProjectName:
-                      type: string
-                    Status:
-                      type: string
-                    Category:
-                      type: string
-        '404':
-          description: No projects found for this client
-  /client/{clientname}/allprojects:
+                type: object
+                properties:
+                  masterAllocations:
+                    type: array
+                    items:
+                      type: object
+        '500':
+          description: Internal Server Error
+
+  /employees/search:
     get:
-      summary: Get all projects for a client by name
+      summary: Search employees by name or ID
       parameters:
-        - in: path
-          name: clientname
+        - in: query
+          name: query
           required: true
           schema:
             type: string
+            description: Search term for employee name or ID
       responses:
         '200':
-          description: A list of all projects for the client
+          description: Successfully searched employees
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    ProjectID:
-                      type: integer
-                    ProjectName:
-                      type: string
-                    Status:
-                      type: string
-                    Category:
-                      type: string
-        '404':
-          description: No projects found for this client
-  /project/{name}/employees:
+                type: object
+                properties:
+                  employees:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        EmployeeId:
+                          type: integer
+                        EmployeeName:
+                          type: string
+        '400':
+          description: Query parameter is required
+        '500':
+          description: Internal Server Error
+
+  /project-allocate/form/data:
     get:
-      summary: Get employees working on a specific project
+      summary: Get employee allocation data within a date range
       parameters:
-        - in: path
-          name: name
-          required: true
+        - in: query
+          name: employeeName
           schema:
             type: string
+          description: Employee name
+        - in: query
+          name: employeeId
+          schema:
+            type: string
+          description: Employee ID
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+          description: Start date for allocation
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+          description: End date for allocation
       responses:
         '200':
-          description: A list of employees working on the project
+          description: Successfully fetched allocation data
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    EmployeeID:
-                      type: integer
-                    Role:
-                      type: string
-                    EmployeeName:
-                      type: string
-                    Email:
-                      type: string
-                    Allocation:
-                      type: integer
-  /detailed-view/{employeeId}:
+                type: object
+        '400':
+          description: Invalid input data
+        '404':
+          description: Employee not found
+        '500':
+          description: Internal Server Error
+
+  /modal/data:
     get:
-      summary: Get detailed view of an employee's project assignments
+      summary: Get data for modal forms
+      description: Fetch clients, projects, employees, and timesheet approvers.
+      responses:
+        '200':
+          description: Successfully retrieved modal form data
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal Server Error
+
+  /employee-allocations/{employeeId}:
+    get:
+      summary: Get employee allocation percentage
       parameters:
         - in: path
           name: employeeId
           required: true
           schema:
             type: integer
+            description: Employee ID
       responses:
         '200':
-          description: Detailed view of employee's assignments
+          description: Successfully retrieved allocation percentage
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    EmployeeName:
-                      type: string
-                    EmployeeID:
-                      type: integer
-                    ClientName:
-                      type: string
-                    ProjectName:
-                      type: string
-                    Allocation:
-                      type: integer
-                    ProjectStatus:
-                      type: string
-                    AllocationStartDate:
-                      type: string
-                      format: date
-                    AllocationEndDate:
-                      type: string
-                      format: date
-                    Actions:
-                      type: string
-  /form/{employeeId}:
+                type: object
+                properties:
+                  remainingAllocation:
+                    type: integer
+        '500':
+          description: Internal Server Error
+
+  /allocations/{allocationId}:
     put:
-      summary: Update allocation data
+      summary: Update an allocation
       parameters:
         - in: path
-          name: employeeId
+          name: allocationId
           required: true
           schema:
             type: integer
+            description: Allocation ID
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              properties:
-                clientId:
-                  type: integer
-                status:
-                  type: string
-                  enum: ['allocated', 'unallocated']
-                allocation:
-                  type: integer
       responses:
         '200':
-          description: Allocation updated successfully
+          description: Successfully updated allocation
         '400':
-          description: Invalid request parameters
-        '404':
-          description: No project assignment found for this employee and client
+          description: Invalid input or allocation overlap
         '500':
-          description: Internal server error
+          description: Internal Server Error
+
+  /allocations/{allocationId}:
+    delete:
+      summary: Delete an allocation
+      parameters:
+        - in: path
+          name: allocationId
+          required: true
+          schema:
+            type: integer
+            description: Allocation ID
+      responses:
+        '200':
+          description: Successfully deleted allocation
+        '404':
+          description: Allocation not found
+        '500':
+          description: Internal Server Error
+
+components:
+  schemas:
+    Allocation:
+      type: object
+      properties:
+        AllocationID:
+          type: integer
+        EmployeeID:
+          type: integer
+        AllocationStatus:
+          type: string
+        AllocationPercent:
+          type: number
