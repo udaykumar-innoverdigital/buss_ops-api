@@ -20,6 +20,78 @@ const pool = mysql.createPool({
   queueLimit: 0,
 });
 
+async function insertRoles(connection) {
+  const roles = [
+    "Associate Developer",
+    "Director",
+    "Senior Technical Manager",
+    "Timesheet Manager",
+    "SVP",
+    "Manager",
+    "Director - Delivery",
+    "Senior Director",
+    "Executive Vice President – Business Execution & Transformation",
+    "Associate Director - Account Management",
+    "Sr. Vice President - Tax & Tech",
+    "Full Stack Engineer",
+    "Solution Analyst",
+  ];
+
+  for (const role of roles) {
+    await new Promise((resolve, reject) => {
+      const query = 'INSERT IGNORE INTO roles (RoleName) VALUES (?)';
+      connection.query(query, [role], (error) => {
+        if (error) {
+          console.error('Error inserting role:', error);
+          return reject(error);
+        }
+        console.log(`Role "${role}" inserted successfully`);
+        resolve();
+      });
+    });
+  }
+}
+
+// New function to get or insert a role
+async function getOrInsertRole(roleName, connection) {
+  const role = await new Promise((resolve, reject) => {
+    const query = 'SELECT RoleId FROM roles WHERE RoleName = ?';
+    connection.query(query, [roleName], (error, results) => {
+      if (error) return reject(error);
+      resolve(results[0]);
+    });
+  });
+
+  if (role) {
+    return role.RoleId;
+  }
+
+  const result = await new Promise((resolve, reject) => {
+    const query = 'INSERT INTO roles (RoleName) VALUES (?)';
+    connection.query(query, [roleName], (error, result) => {
+      if (error) return reject(error);
+      resolve(result);
+    });
+  });
+
+  return result.insertId;
+}
+
+// New function to insert emp_role
+async function insertEmpRole(employeeId, roleId, connection) {
+  await new Promise((resolve, reject) => {
+    const query = 'INSERT INTO emp_role (EmployeeID, RoleId) VALUES (?, ?)';
+    connection.query(query, [employeeId, roleId], (error) => {
+      if (error) {
+        console.error('Error inserting emp_role:', error);
+        return reject(error);
+      }
+      console.log(`emp_role inserted for EmployeeID: ${employeeId}, RoleId: ${roleId}`);
+      resolve();
+    });
+  });
+}
+
 // Function to insert a client if it doesn't exist
 async function insertClientIfNotExists(clientName, connection) {
   // ... existing logic
@@ -141,6 +213,9 @@ export async function populateDatabase() {
   });
 
   try {
+
+    await insertRoles(connection);
+
     const sheetName = workbook.SheetNames[0];
     const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
@@ -177,6 +252,11 @@ export async function populateDatabase() {
           resolve(employeeResult.insertId);
         });
       });
+
+      if (employee.EmployeeRole) {
+        const roleId = await getOrInsertRole(employee.EmployeeRole, connection);
+        await insertEmpRole(employeeId, roleId, connection);
+      }
 
       const projectName = row['Project/SOW Name'] || null;
 
@@ -227,6 +307,7 @@ export async function populateDatabase() {
           resolve();
         });
       });
+
     }
     console.log('Database populated successfully');
     }  

@@ -21,7 +21,7 @@ db.connect((err) => {
 
 // Function to check and create tables
 function checkAndCreateTables() {
-  const requiredTables = ['employees', 'clients', 'projects', 'allocations'];
+  const requiredTables = ['employees', 'clients', 'projects', 'allocations', 'roles', 'emp_role'];
   // Use correct query to check for existing tables
   const checkTablesQuery = `
     SELECT table_name
@@ -109,7 +109,22 @@ function createTables(tables) {
         FOREIGN KEY (ClientID) REFERENCES Clients(ClientID) ON DELETE CASCADE,
         FOREIGN KEY (EmployeeID) REFERENCES employees(EmployeeID) ON DELETE CASCADE
        )
+      `,
+    roles: `
+      CREATE TABLE IF NOT EXISTS roles(
+        RoleId INT AUTO_INCREMENT PRIMARY KEY,
+        RoleName VARCHAR(255) NOT NULL
+      )
     `,
+    emp_role: `
+      CREATE TABLE IF NOT EXISTS emp_role(
+        EmployeeRoleId INT AUTO_INCREMENT PRIMARY KEY,
+        RoleId INT NOT NULL,
+        EmployeeID INT NOT NULL,
+        FOREIGN KEY (RoleId) REFERENCES roles(RoleId) ON DELETE CASCADE,
+        FOREIGN KEY (EmployeeID) REFERENCES employees(EmployeeID) ON DELETE CASCADE
+      )
+    `
   };
 
   tables.forEach(table => {
