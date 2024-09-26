@@ -14,9 +14,12 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.20.0",
+    "multer": "^1.4.5-lts.1",
     "mysql": "^2.18.1",
+    "ninja": "file:",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
+    "xlsx": "^0.18.5",
     "yamljs": "^0.3.0"
   }
 }
