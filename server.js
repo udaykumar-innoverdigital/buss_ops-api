@@ -291,29 +291,55 @@ app.get('/modal/data', (req, res) => {
     });
   });
 });
+// Assuming you're using Express.js
 app.get('/employee-allocations/:employeeId', (req, res) => {
   const { employeeId } = req.params;
+  const { startDate, endDate } = req.query;
 
+  // Validate the presence of startDate and endDate
+  if (!startDate || !endDate) {
+    return res.status(400).json({ error: 'startDate and endDate are required.' });
+  }
+
+  // Ensure startDate is before or equal to endDate
+  if (new Date(startDate) > new Date(endDate)) {
+    return res.status(400).json({ error: 'startDate cannot be after endDate.' });
+  }
+
+  // SQL query to calculate total allocation within the date range
   const allocationQuery = `
     SELECT 
       IFNULL(SUM(AllocationPercent), 0) AS totalAllocation 
     FROM Allocations 
-    WHERE EmployeeID = ? AND AllocationStatus IN ('Active', 'Allocated')
+    WHERE 
+      EmployeeID = ? AND 
+      AllocationStatus IN ('Active', 'Allocated') AND
+      (
+        (AllocationStartDate <= ? AND (AllocationEndDate >= ? OR AllocationEndDate IS NULL))
+      )
   `;
 
+  // SQL query to calculate staged additions within the date range
   const stagedAdditionsQuery = `
     SELECT IFNULL(SUM(AllocationPercent), 0) AS stagedAdditions 
     FROM Allocations 
-    WHERE EmployeeID = ? AND AllocationStatus = 'Staged'
+    WHERE 
+      EmployeeID = ? AND 
+      AllocationStatus = 'Staged' AND
+      (
+        (AllocationStartDate <= ? AND (AllocationEndDate >= ? OR AllocationEndDate IS NULL))
+      )
   `;
 
-  db.query(allocationQuery, [employeeId], (err, allocationResult) => {
+  // Execute the allocationQuery
+  db.query(allocationQuery, [employeeId, endDate, startDate], (err, allocationResult) => {
     if (err) {
       console.error('Error fetching allocations:', err);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
 
-    db.query(stagedAdditionsQuery, [employeeId], (err, stagedResult) => {
+    // Execute the stagedAdditionsQuery
+    db.query(stagedAdditionsQuery, [employeeId, endDate, startDate], (err, stagedResult) => {
       if (err) {
         console.error('Error fetching staged additions:', err);
         return res.status(500).json({ error: 'Internal Server Error' });
@@ -323,10 +349,18 @@ app.get('/employee-allocations/:employeeId', (req, res) => {
       const stagedAdditions = stagedResult[0].stagedAdditions;
       const remainingAllocation = 100 - totalAllocation - stagedAdditions;
 
-      res.json({ remainingAllocation });
+      // Ensure remainingAllocation doesn't go below 0
+      const adjustedRemaining = remainingAllocation >= 0 ? remainingAllocation : 0;
+
+      res.json({ 
+        totalAllocation, 
+        stagedAdditions, 
+        remainingAllocation: adjustedRemaining 
+      });
     });
   });
 });
+
 
 app.get('/modal/data/:allocationId', (req, res) => {
   const { allocationId } = req.params;
