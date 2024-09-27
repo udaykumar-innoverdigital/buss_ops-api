@@ -35,7 +35,7 @@ function checkAndCreateTables() {
       console.error('Error checking tables:', err);
       return;
     }
-    const existingTables = results.map(row => row.TABLE_NAME.toLowerCase());
+    const existingTables = results.map(row => row.TABLE_NAME);
     const missingTables = requiredTables.filter(table => !existingTables.includes(table));
 
     if (missingTables.length > 0) {
