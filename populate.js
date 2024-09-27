@@ -22,7 +22,6 @@ const pool = mysql.createPool({
 
 // Function to insert a client if it doesn't exist
 async function insertClientIfNotExists(clientName, connection) {
-  // ... existing logic
   if (!clientName) return null; // Skip if clientName is invalid
 
   const client = await new Promise((resolve, reject) => {
@@ -55,17 +54,7 @@ async function insertClientIfNotExists(clientName, connection) {
 }
 
 // Function to insert a project if it doesn't exist
-async function insertProjectIfNotExists(
-  projectName,
-  clientId,
-  projectStatus,
-  projectCategory,
-  projectManager,
-  projectStartDate,
-  projectEndDate,
-  connection
-) {
-  // ... existing logic
+async function insertProjectIfNotExists(projectName,clientId,projectStatus,projectCategory,projectManager,projectStartDate,projectEndDate,connection) {
   if (!projectName || !clientId) return null; // Skip if projectName or clientId is invalid
 
   const project = await new Promise((resolve, reject) => {
@@ -103,10 +92,8 @@ async function insertProjectIfNotExists(
   return projectId;
 }
 
-
 // Function to convert Excel date to MySQL date format
 function excelDateToMySQLDate(excelDate) {
-  // ... existing logic
   if (!excelDate || typeof excelDate !== 'number') return null; // Ensure the date is a valid number
 
   const date = new Date((excelDate - 25569) * 86400 * 1000);
@@ -150,12 +137,19 @@ export async function populateDatabase() {
       const clientName = row['Account'] || null;
       const clientId = await insertClientIfNotExists(clientName, connection);
 
+      // Check if EmployeeId is empty or null
+      if (!row['Employee Id']) {
+        console.log('Skipping row due to empty or null EmployeeId');
+        continue;
+      }
+
       if (!clientId) {
         console.log(`Client not inserted for row: ${JSON.stringify(row)}`);
         continue;
       }
 
       const employee = {
+        EmployeeId: row['Employee Id'] || null,
         EmployeeName: row['Keka Resource Name'] || null,
         EmployeeRole: row['Role/Title'] || null,
         EmployeeStudio: row['Studio Name'] || null,
@@ -168,13 +162,13 @@ export async function populateDatabase() {
       };
 
       console.log('Inserting Employee:', employee);
-      const employeeId = await new Promise((resolve, reject) => {
-        connection.query('INSERT INTO Employees SET ?', employee, (error, employeeResult) => {
+      await new Promise((resolve, reject) => {
+        connection.query('INSERT INTO Employees SET ? ON DUPLICATE KEY UPDATE ?', [employee, employee], (error) => {
           if (error) {
-            console.error('Error inserting employee:', error);
+            console.error('Error inserting/updating employee:', error);
             return reject(error);
           }
-          resolve(employeeResult.insertId);
+          resolve();
         });
       });
 
@@ -207,7 +201,7 @@ export async function populateDatabase() {
 
       const allocation = {
         ProjectID: projectId,
-        EmployeeID: employeeId,
+        EmployeeId: employee.EmployeeId,
         ClientID: clientId,
         AllocationPercentage: row['% Allocation'] ? parseFloat(row['% Allocation']) : null,
         AllocationBillingType: row['Billing Type (T&M / Fix Price)'] || null,
@@ -229,8 +223,7 @@ export async function populateDatabase() {
       });
     }
     console.log('Database populated successfully');
-    }  
-   finally {
+  } finally {
     connection.release(); // Release the connection back to the pool
   }
 }

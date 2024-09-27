@@ -51,7 +51,7 @@ function createTables(tables) {
   const tableDefinitions = {
     Employees: `
       CREATE TABLE IF NOT EXISTS Employees (
-        EmployeeID INT AUTO_INCREMENT PRIMARY KEY,
+        EmployeeId VARCHAR(10) PRIMARY KEY,
         EmployeeName VARCHAR(255),
         EmployeeRole VARCHAR(255),
         EmployeeEmail VARCHAR(255) NULL,
@@ -94,7 +94,7 @@ function createTables(tables) {
         AllocationID INT AUTO_INCREMENT PRIMARY KEY,
         ClientID INT NOT NULL,
         ProjectID INT NOT NULL,
-        EmployeeID INT NOT NULL,
+        EmployeeID VARCHAR(10),
         AllocationStatus VARCHAR(100) NULL,
         AllocationPercentage DECIMAL(5,2),
         AllocationBillingType VARCHAR(100),
