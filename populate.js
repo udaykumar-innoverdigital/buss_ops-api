@@ -26,7 +26,7 @@ async function insertClientIfNotExists(clientName, connection) {
   if (!clientName) return null; // Skip if clientName is invalid
 
   const client = await new Promise((resolve, reject) => {
-    const query = 'SELECT ClientID FROM clients WHERE ClientName = ?';
+    const query = 'SELECT ClientID FROM Clients WHERE ClientName = ?';
     connection.query(query, [clientName], (error, results) => {
       if (error) return reject(error);
       resolve(results[0]);
@@ -42,7 +42,7 @@ async function insertClientIfNotExists(clientName, connection) {
   };
 
   const clientId = await new Promise((resolve, reject) => {
-    connection.query('INSERT INTO clients SET ?', newClient, (error, result) => {
+    connection.query('INSERT INTO Clients SET ?', newClient, (error, result) => {
       if (error) {
         console.error('Error inserting client:', error); // Log error details
         return reject(error);
@@ -69,7 +69,7 @@ async function insertProjectIfNotExists(
   if (!projectName || !clientId) return null; // Skip if projectName or clientId is invalid
 
   const project = await new Promise((resolve, reject) => {
-    const query = 'SELECT ProjectID FROM projects WHERE ProjectName = ?';
+    const query = 'SELECT ProjectID FROM Projects WHERE ProjectName = ?';
     connection.query(query, [projectName], (error, results) => {
       if (error) return reject(error);
       resolve(results[0]);
@@ -91,7 +91,7 @@ async function insertProjectIfNotExists(
   };
 
   const projectId = await new Promise((resolve, reject) => {
-    connection.query('INSERT INTO projects SET ?', newProject, (error, result) => {
+    connection.query('INSERT INTO Projects SET ?', newProject, (error, result) => {
       if (error) {
         console.error('Error inserting project:', error); // Log error details
         return reject(error);
@@ -169,7 +169,7 @@ export async function populateDatabase() {
 
       console.log('Inserting Employee:', employee);
       const employeeId = await new Promise((resolve, reject) => {
-        connection.query('INSERT INTO employees SET ?', employee, (error, employeeResult) => {
+        connection.query('INSERT INTO Employees SET ?', employee, (error, employeeResult) => {
           if (error) {
             console.error('Error inserting employee:', error);
             return reject(error);
@@ -219,7 +219,7 @@ export async function populateDatabase() {
 
       console.log('Inserting Project Allocation:', allocation);
       await new Promise((resolve, reject) => {
-        connection.query('INSERT INTO allocations SET ?', allocation, (error) => {
+        connection.query('INSERT INTO Allocations SET ?', allocation, (error) => {
           if (error) {
             console.error('Error inserting project allocations:', error);
             return reject(error);

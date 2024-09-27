@@ -21,7 +21,7 @@ db.connect((err) => {
 
 // Function to check and create tables
 function checkAndCreateTables() {
-  const requiredTables = ['employees', 'clients', 'projects', 'allocations'];
+  const requiredTables = ['Employees', 'Clients', 'Projects', 'Allocations'];
   // Use correct query to check for existing tables
   const checkTablesQuery = `
     SELECT table_name
@@ -49,8 +49,8 @@ function checkAndCreateTables() {
 // Function to create tables
 function createTables(tables) {
   const tableDefinitions = {
-    employees: `
-      CREATE TABLE IF NOT EXISTS employees (
+    Employees: `
+      CREATE TABLE IF NOT EXISTS Employees (
         EmployeeID INT AUTO_INCREMENT PRIMARY KEY,
         EmployeeName VARCHAR(255),
         EmployeeRole VARCHAR(255),
@@ -67,8 +67,8 @@ function createTables(tables) {
         EmployeePhotoDetails VARCHAR(255) NULL
       )
     `,
-    clients: `
-      CREATE TABLE IF NOT EXISTS clients (
+    Clients: `
+      CREATE TABLE IF NOT EXISTS Clients (
         ClientID INT AUTO_INCREMENT PRIMARY KEY,
         ClientName VARCHAR(255) NOT NULL UNIQUE,
         ClientCountry VARCHAR(100) NULL,
@@ -76,8 +76,8 @@ function createTables(tables) {
         ClientLogo VARCHAR(100) NULL
       )
     `,
-    projects: `
-      CREATE TABLE IF NOT EXISTS projects (
+    Projects: `
+      CREATE TABLE IF NOT EXISTS Projects (
         ProjectID INT AUTO_INCREMENT PRIMARY KEY,
         ProjectName VARCHAR(255) NOT NULL,
         ClientID INT,
@@ -86,11 +86,11 @@ function createTables(tables) {
         ProjectManager VARCHAR(100),
         ProjectStartDate DATE,
         ProjectEndDate DATE,
-        FOREIGN KEY (ClientID) REFERENCES clients(ClientID) ON DELETE CASCADE
+        FOREIGN KEY (ClientID) REFERENCES Clients(ClientID) ON DELETE CASCADE
       )
     `,
-    allocations: `
-      CREATE TABLE IF NOT EXISTS allocations (
+    Allocations: `
+      CREATE TABLE IF NOT EXISTS Allocations (
         AllocationID INT AUTO_INCREMENT PRIMARY KEY,
         ClientID INT NOT NULL,
         ProjectID INT NOT NULL,
@@ -105,9 +105,9 @@ function createTables(tables) {
         AllocationEndDate DATE,
         ModifiedBy VARCHAR(100) NULL,
         ModifiedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (ProjectID) REFERENCES projects(ProjectID) ON DELETE CASCADE,
+        FOREIGN KEY (ProjectID) REFERENCES Projects(ProjectID) ON DELETE CASCADE,
         FOREIGN KEY (ClientID) REFERENCES Clients(ClientID) ON DELETE CASCADE,
-        FOREIGN KEY (EmployeeID) REFERENCES employees(EmployeeID) ON DELETE CASCADE
+        FOREIGN KEY (EmployeeID) REFERENCES Employees(EmployeeID) ON DELETE CASCADE
        )
     `,
   };
