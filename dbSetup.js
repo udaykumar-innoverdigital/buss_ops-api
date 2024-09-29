@@ -222,13 +222,37 @@ async function populateDatabase() {
         (EmployeeName, EmployeeRole, EmployeeStudio, EmployeeSubStudio, EmployeeLocation, 
         EmployeeJoiningDate, EmployeeEndingDate, EmployeeKekaStatus, EmployeeContractType) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE 
+          EmployeeRole = VALUES(EmployeeRole),
+          EmployeeStudio = VALUES(EmployeeStudio),
+          EmployeeSubStudio = VALUES(EmployeeSubStudio),
+          EmployeeLocation = VALUES(EmployeeLocation),
+          EmployeeJoiningDate = VALUES(EmployeeJoiningDate),
+          EmployeeEndingDate = VALUES(EmployeeEndingDate),
+          EmployeeKekaStatus = VALUES(EmployeeKekaStatus),
+          EmployeeContractType = VALUES(EmployeeContractType)
       `, [
         row['Keka Resource Name'], row['Role/Title'], row['Studio Name'], row['Sub-Studio Name'],
         row['Location (US/India)'], excelDateToMySQLDate(row['Innover DOJ']), 
         null, row['Keka Status (Active/InActive)'],
         row['Emp Type (FTE/Contractor)']
       ]);
-      const employeeId = employeeResult.insertId;
+
+      let employeeId;
+
+      // If the record was inserted, use the returned insertId
+      if (employeeResult.insertId) {
+        employeeId = employeeResult.insertId;
+      } else {
+        // If the record was updated, retrieve the employeeId by querying the employees table
+        const [existingEmployee] = await connection.query('SELECT EmployeeID FROM employees WHERE EmployeeName = ?', [row['Keka Resource Name']]);
+
+        if (existingEmployee.length > 0) {
+          employeeId = existingEmployee[0].EmployeeID;
+        } else {
+          throw new Error(`Employee ID not found for employee: ${row['Keka Resource Name']}`);
+        }
+      }
 
       // Insert project
       // Check if ProjectName is null
