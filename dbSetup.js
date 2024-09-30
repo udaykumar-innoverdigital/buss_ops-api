@@ -118,7 +118,7 @@ async function createTables(connection) {
   await connection.query(`
     CREATE TABLE IF NOT EXISTS project (
       ProjectID char(36) PRIMARY KEY,
-      Name varchar(255) NOT NULL,
+      Name varchar(255) NOT NULL UNIQUE,
       StartDate varchar(10) DEFAULT NULL,
       EndDate varchar(10) DEFAULT NULL,
       Status int(11) NOT NULL,
@@ -140,7 +140,7 @@ async function createTables(connection) {
     CREATE TABLE IF NOT EXISTS resource (
       ResourceID char(36) PRIMARY KEY,
       Email varchar(255),
-      Name varchar(255) NOT NULL
+      Name varchar(255) NOT NULL UNIQUE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   `);
 
@@ -167,7 +167,6 @@ async function createTables(connection) {
   `);
 }
 
-// Helper functions (getOrInsertRole, insertClientIfNotExists, etc.) remain the same
 
 async function populateDatabase() {
   const fileName = 'Allocation.xlsx';
@@ -191,33 +190,14 @@ async function populateDatabase() {
     const sheetName = workbook.SheetNames[0];
     const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
+    // CHANGE: Added a Map to store unique project names and their IDs
+    const projectMap = new Map();
+
     for (const row of data) {
       console.log('Processing row:', JSON.stringify(row, null, 2));
 
       // Populate Ninja DB
       await connection.query(`USE ${ninjaDb}`);
-      
-      // Insert client
-      if (!row['Account']) {
-        console.log('Skipping row due to missing ClientName:', JSON.stringify(row));
-        continue; // Skip this row if ClientName is null or empty
-      }
-
-      let [clientResult] = await connection.query('INSERT IGNORE INTO clients (ClientName) VALUES (?)', [row['Account']]);
-      let clientId = clientResult.insertId;
-
-      if (clientId === 0) {
-        // If the client already exists, fetch its ID
-        [clientResult] = await connection.query('SELECT ClientID FROM clients WHERE ClientName = ?', [row['Account']]);
-
-        if (clientResult.length > 0 && clientResult[0].ClientID) {
-            clientId = clientResult[0].ClientID; // Client exists, assign the ID
-        } else {
-            console.error('Error: Client not found for Account:', row['Account']);
-            continue; // Skip this row if the client is not found
-        }
-      }
-
 
       // Insert employee
       if (!row['Employee Id']) {
@@ -270,6 +250,21 @@ async function populateDatabase() {
         }
       }
 
+      // Insert client
+      let [clientResult] = await connection.query('INSERT IGNORE INTO clients (ClientName) VALUES (?)', [row['Account']]);
+      let clientId = clientResult.insertId;
+
+      if (clientId === 0) {
+        // If the client already exists, fetch its ID
+        [clientResult] = await connection.query('SELECT ClientID FROM clients WHERE ClientName = ?', [row['Account']]);
+
+        if (clientResult.length > 0 && clientResult[0].ClientID) {
+            clientId = clientResult[0].ClientID; // Client exists, assign the ID
+        } else {
+            console.error('Error: Client not found for Account:', row['Account']);
+            continue; // Skip this row if the client is not found
+        }
+      }
 
       // Insert project
       if (!row['Project/SOW Name']) {
@@ -345,32 +340,68 @@ async function populateDatabase() {
       }
 
       // Insert resource
-      const resourceId = uuidv4();
-      await connection.query('INSERT INTO resource (ResourceID, Name, Email) VALUES (?, ?, ?)', 
-        [resourceId, row['Keka Resource Name'], null]);
+      // Check if resource already exists
+      let [existingResource] = await connection.query('SELECT ResourceID FROM resource WHERE Name = ?', [row['Keka Resource Name']]);
+      let resourceId;
+
+      if (existingResource.length > 0) {
+        resourceId = existingResource[0].ResourceID;
+      } else {
+        resourceId = uuidv4();
+        await connection.query('INSERT INTO resource (ResourceID, Name, Email) VALUES (?, ?, ?)', 
+          [resourceId, row['Keka Resource Name'], null]);
+      }
 
       // Insert project
-      const timesheetProjectId = uuidv4();
-      await connection.query(`
-        INSERT INTO project (ProjectID, Name, StartDate, EndDate, Status, TotalHours) 
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [
-        timesheetProjectId, row['Project/SOW Name'], 
-        null, null,
-        1, Math.floor(Math.random() * 1000) + 100
-      ]);
+      let timesheetProjectId;
+      if (projectMap.has(row['Project/SOW Name'])) {
+        timesheetProjectId = projectMap.get(row['Project/SOW Name']);
+      } else {
+        // Check if the project already exists
+        const [existingProject] = await connection.query('SELECT ProjectID FROM project WHERE Name = ?', [row['Project/SOW Name']]);
 
-      // Insert manager projects
-      await connection.query('INSERT INTO managerprojects (ManagerID, ProjectID) VALUES (?, ?)', 
-        [managerId, timesheetProjectId]);
+        if (existingProject.length > 0) {
+          timesheetProjectId = existingProject[0].ProjectID;
+        } else {
+          timesheetProjectId = uuidv4();
+          await connection.query(`
+            INSERT INTO project (ProjectID, Name, StartDate, EndDate, Status, TotalHours) 
+            VALUES (?, ?, ?, ?, ?, ?)
+          `, [
+            timesheetProjectId, row['Project/SOW Name'], 
+            null, null,
+            1, Math.floor(Math.random() * 1000) + 100
+          ]);
+        }
 
-      // Insert resource projects
-      await connection.query(`
-        INSERT INTO resourceprojects (ResourceID, ProjectID, Status, TotalHours) 
-        VALUES (?, ?, ?, ?)
-      `, [resourceId, timesheetProjectId, row['Keka Status (Active/InActive)'], Math.floor(Math.random() * 500) + 50]);
+        projectMap.set(row['Project/SOW Name'], timesheetProjectId);
+      }
 
-      // Insert sample daily hours and worked hours
+      // Insert Manager Project
+      const [existingManagerProject] = await connection.query(
+        'SELECT * FROM managerprojects WHERE ManagerID = ? AND ProjectID = ?',
+        [managerId, timesheetProjectId]
+      );
+
+      if (existingManagerProject.length === 0) {
+        await connection.query('INSERT INTO managerprojects (ManagerID, ProjectID) VALUES (?, ?)', 
+          [managerId, timesheetProjectId]);
+      }
+
+      // Insert resourceprojects
+      const [existingResourceProject] = await connection.query(
+        'SELECT * FROM resourceprojects WHERE ResourceID = ? AND ProjectID = ?',
+        [resourceId, timesheetProjectId]
+      );
+
+      if (existingResourceProject.length === 0) {
+        await connection.query(`
+          INSERT INTO resourceprojects (ResourceID, ProjectID, Status, TotalHours) 
+          VALUES (?, ?, ?, ?)
+        `, [resourceId, timesheetProjectId, row['Keka Status (Active/InActive)'], Math.floor(Math.random() * 500) + 50]);
+      }
+
+      // Insert worked hours
       const today = new Date();
       for (let i = 0; i < 30; i++) {
         const date = new Date(today);
