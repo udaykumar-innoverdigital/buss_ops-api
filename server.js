@@ -238,19 +238,18 @@ app.get('/project-allocate/form/data', async (req, res) => {
   }
 });
 
-
 app.get('/modal/data', (req, res) => {
   const clientsQuery = `SELECT ClientID, ClientName FROM Clients`;
-  const projectsQuery = `SELECT ProjectID, ProjectName, ClientID, ProjectManager FROM Projects WHERE ProjectStatus = 'In Progress'`;
-  const employeesQuery = `SELECT EmployeeID, EmployeeName FROM Employees WHERE EmployeeKekaStatus = 'active'`;
+  const projectsQuery = `SELECT ProjectID, ProjectName, ClientID, ProjectManager, ProjectManagerID FROM Projects WHERE ProjectStatus = 'In Progress'`;
+  const employeesQuery = `SELECT EmployeeID, EmployeeName FROM Employees WHERE EmployeeKekaStatus = 'Active'`;
   const timeSheetApproversQuery = `
-    SELECT DISTINCT EmployeeName AS Name
+    SELECT DISTINCT EmployeeID, EmployeeName AS Name
     FROM Employees
-    WHERE EmployeeRole = 'Time Sheet Approver'
+    WHERE EmployeeRole = 'Project Manager'
     UNION
-    SELECT DISTINCT ProjectManager AS Name
+    SELECT DISTINCT ProjectManagerID AS EmployeeID, ProjectManager AS Name
     FROM Projects
-    WHERE ProjectManager IS NOT NULL
+    WHERE ProjectManagerID IS NOT NULL
   `;
 
   db.query(clientsQuery, (err, clients) => {
@@ -277,20 +276,19 @@ app.get('/modal/data', (req, res) => {
             return res.status(500).json({ error: 'Internal Server Error' });
           }
 
-          // Extract unique time sheet approvers
-          const uniqueApprovers = [...new Set(timeSheetApprovers.map(approver => approver.Name))];
-
           res.json({
             clients,
             projects,
-            employees, // Include employees in the response
-            timeSheetApprovers: uniqueApprovers
+            employees,
+            timeSheetApprovers
           });
         });
       });
     });
   });
 });
+
+
 // Assuming you're using Express.js
 app.get('/employee-allocations/:employeeId', (req, res) => {
   const { employeeId } = req.params;
@@ -400,6 +398,7 @@ app.put('/allocations/:allocationId', (req, res) => {
     AllocationStatus,
     AllocationStartDate,
     AllocationEndDate,
+    AllocationTimeSheetApproverID,
     AllocationTimeSheetApprover,
     AllocationBillingRate,
     AllocationBillingType,
@@ -415,7 +414,9 @@ app.put('/allocations/:allocationId', (req, res) => {
     AllocationPercent === undefined ||
     !AllocationStartDate ||
     !AllocationBillingType ||
-    !AllocationBilledCheck
+    !AllocationBilledCheck ||
+    !AllocationTimeSheetApproverID ||
+    !AllocationTimeSheetApprover
   ) {
     return res.status(400).json({ message: 'Required fields are missing' });
   }
@@ -526,6 +527,7 @@ app.put('/allocations/:allocationId', (req, res) => {
             AllocationStatus = ?,
             AllocationStartDate = ?,
             AllocationEndDate = ?,
+            AllocationTimeSheetApproverID = ?,
             AllocationTimeSheetApprover = ?,
             AllocationBillingRate = ?,
             AllocationBillingType = ?,
@@ -544,6 +546,7 @@ app.put('/allocations/:allocationId', (req, res) => {
             AllocationStatus,
             AllocationStartDate,
             AllocationEndDate,
+            AllocationTimeSheetApproverID,
             AllocationTimeSheetApprover,
             AllocationBilledCheck === 'Yes' ? AllocationBillingRate : 0.00,
             AllocationBillingType,
@@ -596,6 +599,7 @@ app.post('/api/allocate', (req, res) => {
     AllocationPercent,
     AllocationStartDate,
     AllocationEndDate,
+    AllocationTimeSheetApproverID,
     AllocationTimeSheetApprover,
     AllocationBillingRate,
     AllocationBillingType,
@@ -615,6 +619,8 @@ app.post('/api/allocate', (req, res) => {
     !AllocationStartDate ||
     AllocationBillingRate === undefined ||
     !AllocationBillingType ||
+    !AllocationTimeSheetApproverID ||
+    !AllocationTimeSheetApprover ||
     !AllocationBilledCheck
   ) {
     return res.status(400).json({ message: 'Required fields are missing' });
@@ -708,13 +714,15 @@ app.post('/api/allocate', (req, res) => {
           AllocationPercent,
           AllocationStartDate,
           AllocationEndDate,
+          AllocationTimeSheetApproverID,
           AllocationTimeSheetApprover,
           AllocationBillingRate,
           AllocationBillingType,
           AllocationBilledCheck,
           ModifiedBy
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
+
 
       db.query(
         insertQuery,
@@ -726,8 +734,9 @@ app.post('/api/allocate', (req, res) => {
           AllocationPercent,
           AllocationStartDate,
           AllocationEndDate || null,
+          AllocationTimeSheetApproverID,
           AllocationTimeSheetApprover,
-          AllocationBilledCheck === 'Yes' ? AllocationBillingRate : null, // Consistent with React
+          AllocationBilledCheck === 'Yes' ? AllocationBillingRate : null,
           AllocationBillingType,
           AllocationBilledCheck,
           ModifiedBy,
@@ -744,7 +753,6 @@ app.post('/api/allocate', (req, res) => {
     });
   });
 });
-
 
 // Done
 app.get('/employees', (req, res) => {
@@ -1123,7 +1131,8 @@ app.get('/employee-details/:employeeId/allocations', (req, res) => {
       a.AllocationPercent, 
       a.AllocationBillingType, 
       a.AllocationBilledCheck, 
-      a.AllocationBillingRate, 
+      a.AllocationBillingRate,
+      a.AllocationTimeSheetApproverID,
       a.AllocationTimeSheetApprover, 
       a.AllocationStartDate, 
       a.AllocationEndDate, 
@@ -1184,6 +1193,7 @@ app.get('/employee-details/:employeeId/allocations', (req, res) => {
     });
   });
 });
+
 //Done
 app.get('/project-details/:clientId/:projectId', (req, res) => {
   const { clientId, projectId } = req.params;
@@ -1271,6 +1281,7 @@ app.get('/project-details/:clientId/:projectId', (req, res) => {
     });
   });
 });
+
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
