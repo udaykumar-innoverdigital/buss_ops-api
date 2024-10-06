@@ -125,6 +125,83 @@ app.get('/api/allocation-snapshot', (req, res) => {
   });
 });
 
+//
+app.get('/employees/allocations', (req, res) => {
+  const { startDate, endDate } = req.query;
+
+  const query = `
+      SELECT
+          DATE(a.AllocationStartDate) AS AllocationDate,
+          SUM(CASE WHEN a.AllocationStatus = 'Allocated' THEN 1 ELSE 0 END) AS AllocatedCount,
+          SUM(CASE WHEN a.AllocationStatus = 'Client Unallocated' THEN 1 ELSE 0 END) AS UnallocatedCount,
+          SUM(CASE WHEN a.AllocationStatus = 'Draft' THEN 1 ELSE 0 END) AS DraftCount,
+          SUM(CASE WHEN a.AllocationStatus = 'Bench' THEN 1 ELSE 0 END) AS BenchCount
+      FROM
+          Allocations a
+      WHERE
+          a.AllocationStartDate BETWEEN ? AND ?
+      GROUP BY
+          AllocationDate
+      ORDER BY
+          AllocationDate;
+  `;
+
+  db.query(query, [startDate, endDate], (err, results) => {
+      if (err) {
+          console.error('Error executing allocations query:', err);
+          return res.status(500).send('Internal Server Error');
+      }
+      res.json(results);
+  });
+});
+
+//
+app.get('/employees/allocatedLeader', (req, res) => {
+  const { startDate, endDate } = req.query;  // Get date range from query parameters
+
+  const query = `
+    SELECT 
+      DATE(a.AllocationStartDate) AS AllocationDate,
+      COUNT(a.EmployeeID) AS AllocatedCount
+    FROM Allocations a
+    WHERE a.AllocationStatus = 'Allocated'
+    AND a.AllocationStartDate BETWEEN ? AND ?
+    GROUP BY AllocationDate
+    ORDER BY AllocationDate;
+  `;
+
+  db.query(query, [startDate, endDate], (err, results) => {
+    if (err) {
+      console.error('Error fetching allocated data:', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+    res.json(results);  // Send the grouped results
+  });
+});
+
+
+//
+app.get('/employees/allocation-over-time', (req, res) => {
+  const { startDate, endDate } = req.query;
+  const query = `
+    SELECT 
+      a.AllocationStatus, 
+      DATE(a.AllocationStartDate) AS Date, 
+      COUNT(a.EmployeeID) AS EmployeeCount
+    FROM Allocations a
+    WHERE a.AllocationStartDate BETWEEN ? AND ?
+    GROUP BY Date, a.AllocationStatus
+    ORDER BY Date;
+  `;
+  db.query(query, [startDate, endDate], (err, results) => {
+    if (err) {
+      console.error('Error fetching allocation data:', err);
+      return res.status(500).json({ message: 'Internal Server Error' });
+    }
+    res.json(results);
+  });
+});
+
 // API to get BizOps card counts
 app.get('/bizops/card', async (req, res) => {
   try {
